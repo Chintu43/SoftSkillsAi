@@ -4,10 +4,14 @@ let socket = null;
 
 export const getSocket = () => {
   if (!socket) {
-    socket = io('/', {
+    const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
+
+    socket = io(SOCKET_URL, {
       autoConnect: true,
-      reconnection: true
+      reconnection: true,
+      transports: ['websocket', 'polling']
     });
   }
+
   return socket;
 };
