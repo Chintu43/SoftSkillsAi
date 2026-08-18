@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { Navbar } from './components/Navbar';
+import { Footer } from './components/Footer';
 import { LandingPage } from './pages/LandingPage';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
 import { IndividualPractice } from './pages/IndividualPractice';
 import { ActivitySession } from './pages/ActivitySession';
+import { AIVoiceDebateSession } from './pages/AIVoiceDebateSession';
 import { GroupPractice } from './pages/GroupPractice';
 import { VoiceRoomSession } from './pages/VoiceRoomSession';
 import { ResultsPage } from './pages/ResultsPage';
@@ -24,20 +27,23 @@ function MainApp() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', color: '#9CA3AF' }}>
-        Loading SoftSkill AI Platform...
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', color: 'var(--text-muted)' }}>
+        Loading SkillForge AI Platform…
       </div>
     );
   }
 
-  // Handle default tab for logged-in vs non-logged-in users
-  const currentTab = (!user && ['dashboard', 'individual', 'group', 'progress', 'history', 'aicoach', 'profile'].includes(activeTab))
+  const currentTab = (!user && ['dashboard', 'individual', 'group', 'progress', 'history', 'aicoach', 'profile', 'ai-voice-debate'].includes(activeTab))
     ? 'landing'
     : (user && activeTab === 'landing' ? 'dashboard' : activeTab);
 
   const handleStartSoloActivity = (activity) => {
     setSelectedActivity(activity);
-    setActiveTab('active-session');
+    if (activity.id === 'ai-voice-debate') {
+      setActiveTab('ai-voice-debate');
+    } else {
+      setActiveTab('active-session');
+    }
   };
 
   const handleEnterRoom = (room) => {
@@ -52,13 +58,13 @@ function MainApp() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
+
       {/* Top Navbar */}
       <Navbar activeTab={currentTab} setActiveTab={setActiveTab} />
 
-      {/* Main Content Area */}
-      <main style={{ flex: 1, paddingBottom: '60px' }}>
+      {/* Main Content */}
+      <main style={{ flex: 1, paddingBottom: '20px' }}>
         {currentTab === 'landing' && (
           <LandingPage onNavigate={(tab) => setActiveTab(tab)} />
         )}
@@ -82,6 +88,13 @@ function MainApp() {
         {currentTab === 'active-session' && selectedActivity && user && (
           <ActivitySession
             activity={selectedActivity}
+            onBack={() => setActiveTab('individual')}
+            onComplete={handleCompleteSession}
+          />
+        )}
+
+        {currentTab === 'ai-voice-debate' && user && (
+          <AIVoiceDebateSession
             onBack={() => setActiveTab('individual')}
             onComplete={handleCompleteSession}
           />
@@ -124,14 +137,18 @@ function MainApp() {
         )}
       </main>
 
+      {/* Global Footer */}
+      <Footer />
     </div>
   );
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <MainApp />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <MainApp />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

@@ -4,6 +4,15 @@ import { Mic, Clock, Zap, ArrowRight } from 'lucide-react';
 export const IndividualPractice = ({ onStartSession }) => {
   const activities = [
     {
+      id: 'ai-voice-debate',
+      name: 'AI Voice Debate',
+      icon: '⚔️',
+      desc: 'Engage in a live, turn-based spoken debate against an AI opponent. Defend your claims, counter arguments, and get evaluated on debate logic and rebuttal.',
+      difficulty: 'Hard',
+      duration: '5 Rounds',
+      topic: 'AI will replace more jobs than it creates in the next decade.'
+    },
+    {
       id: 'jam',
       name: 'JAM Session',
       icon: '🎤',

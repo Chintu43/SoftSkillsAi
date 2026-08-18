@@ -1,94 +1,84 @@
 import React, { useState, useEffect, useRef } from 'react';
+import {
+  Mic, MicOff, Clock, AlertCircle, ArrowLeft,
+  Sparkles, CheckCircle2, Square, Play, RefreshCw, Search
+} from 'lucide-react';
 import { speechService } from '../services/speechRecognition';
 import { api } from '../services/api';
 import { AudioVisualizer } from '../components/AudioVisualizer';
-import { recommendedTopics } from '../utils/topics';
-import { Play, Square, ArrowLeft, Clock, Sparkles, Search, CheckCircle2 } from 'lucide-react';
+import { getActivityTopics } from '../utils/topics';
 
-// Strict activity-ID → topics-key mapping.
-// Every key must resolve to its own dedicated array in topics.js.
-// Do NOT use a generic fallback — if a key is missing we surface an error
-// instead of silently showing the wrong activity's topics.
-const ACTIVITY_TOPIC_KEY = {
-  'jam':           'jam',
-  'self-intro':    'selfIntroduction',
-  'interview':     'interview',
-  'storytelling':  'storytelling',
-  'impromptu':     'impromptu',
-  'communication': 'communication',
-  'vocabulary':    'vocabulary',
-  'situational':   'situational',
-  'presentation':  'presentation',
-  'leadership':    'leadership',
-  'confidence':    'confidence',
-  'pronunciation': 'pronunciation',
-};
-
-// Fixed HR/behavioral questions shown sequentially during an Interview session.
-// These are DIFFERENT from the interview topic-picker list.
-const INTERVIEW_SESSION_QUESTIONS = [
-  "Tell me about yourself and your background.",
-  "What are your top three professional strengths?",
-  "What is your greatest weakness and how are you addressing it?",
-  "Why should our organisation hire you over other candidates?",
-  "Where do you see your career in five years?",
-  "Describe a major challenge you faced and how you overcame it.",
-  "Tell me about a time you worked successfully in a team.",
-  "How do you handle pressure and tight deadlines?",
-  "Describe a situation where you showed leadership.",
-  "Do you have any questions for us?"
-];
-
+/**
+ * ActivitySession — Handles individual practice activity lifecycle:
+ *   1. topic-select — user chooses from dedicated recommended topics
+ *   2. idle         — topic confirmed, user starts 30-sec prep or begins speaking
+ *   3. prep         — optional 30-sec countdown
+ *   4. speaking     — live speech recognition (READ-ONLY transcript), timer
+ *   5. analyzing    — AI evaluates speech transcript
+ */
 export const ActivitySession = ({ activity, onBack, onComplete }) => {
-  const topicsKey = ACTIVITY_TOPIC_KEY[activity.id];
-  // Strict guard: never fall back to another activity's topics
-  const topicList = topicsKey && recommendedTopics[topicsKey]
-    ? recommendedTopics[topicsKey]
-    : [];
-  const topicsNotFound = !topicsKey || !recommendedTopics[topicsKey];
-
-  const [phase, setPhase]               = useState('topic-select');
-  const [searchQuery, setSearchQuery]   = useState('');
+  // Activity state machine
+  const [phase, setPhase] = useState('topic-select'); // 'topic-select' | 'idle' | 'prep' | 'speaking' | 'analyzing'
   const [currentTopic, setCurrentTopic] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const [prepTimeLeft,  setPrepTimeLeft]  = useState(30);
-  const [speakTimeLeft, setSpeakTimeLeft] = useState(120);
-  const [transcript,    setTranscript]    = useState('');
-  const [errorMsg,      setErrorMsg]      = useState('');
+  // Practice session state
+  const [transcript, setTranscript] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  // Interview-specific state — uses the fixed session question queue,
-  // NOT the topic-picker list.
-  const [interviewIndex,       setInterviewIndex]       = useState(0);
-  const [interviewTranscripts, setInterviewTranscripts] = useState([]);
-  const interviewQuestions = INTERVIEW_SESSION_QUESTIONS;
+  // Timers
+  const [prepTimeLeft, setPrepTimeLeft] = useState(30);
+  const defaultSpeakSecs = (parseInt(activity.duration, 10) || 2) * 60;
+  const [speakTimeLeft, setSpeakTimeLeft] = useState(defaultSpeakSecs);
+  const [totalSpokenSeconds, setTotalSpokenSeconds] = useState(0);
 
-  const prepTimerRef  = useRef(null);
+  // Interview state
+  const [interviewQuestions, setInterviewQuestions] = useState([]);
+  const [interviewIndex, setInterviewIndex] = useState(0);
+  const [interviewAnswers, setInterviewAnswers] = useState([]);
+
+  // Dedicated topics for this specific activity
+  const topicList = getActivityTopics(activity.name, activity.id);
+
+  // Timers refs
+  const prepTimerRef = useRef(null);
   const speakTimerRef = useRef(null);
 
+  // Load interview questions if needed
+  useEffect(() => {
+    if (activity.id === 'interview') {
+      api.getInterviewQuestions()
+        .then(res => setInterviewQuestions(res.questions || []))
+        .catch(() => setInterviewQuestions([
+          "Tell me about yourself and your professional background.",
+          "What are your core strengths and how do you apply them?",
+          "What is your biggest professional weakness, and how are you working to overcome it?",
+          "Why should our organization hire you over other candidates?",
+          "Where do you see your career progressing in five years?"
+        ]));
+    }
+  }, [activity.id]);
+
+  // Clean up timers & speech recognition on unmount
   useEffect(() => {
     return () => {
-      stopAllTimers();
+      if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+      if (speakTimerRef.current) clearInterval(speakTimerRef.current);
       speechService.stop();
     };
   }, []);
 
-  const stopAllTimers = () => {
-    if (prepTimerRef.current)  clearInterval(prepTimerRef.current);
-    if (speakTimerRef.current) clearInterval(speakTimerRef.current);
-  };
-
-  /* ── Topic selection ── */
+  // ── 1. TOPIC SELECTION ──────────────────────────────────────────────────────
   const handleSelectTopic = (topic) => {
     setCurrentTopic(topic);
-    // For interview, seed first question from selected topic as context
     setPhase('idle');
   };
 
-  /* ── Prep countdown ── */
+  // ── 2. PREPARATION TIMER ────────────────────────────────────────────────────
   const handleStartPrep = () => {
     setPhase('prep');
     setPrepTimeLeft(30);
-    stopAllTimers();
     prepTimerRef.current = setInterval(() => {
       setPrepTimeLeft(prev => {
         if (prev <= 1) {
@@ -101,76 +91,137 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
     }, 1000);
   };
 
-  /* ── Speaking ── */
+  // ── 3. SPEAKING PHASE ───────────────────────────────────────────────────────
   const handleStartSpeaking = () => {
-    stopAllTimers();
+    if (prepTimerRef.current) clearInterval(prepTimerRef.current);
     setPhase('speaking');
-    setSpeakTimeLeft(120);
+    setTranscript('');
+    setErrorMsg('');
+    setIsListening(true);
+    setSpeakTimeLeft(defaultSpeakSecs);
+    setTotalSpokenSeconds(0);
 
-    speechService.start(
-      (text) => setTranscript(text),
-      (err)  => console.warn('Speech notice:', err)
-    );
+    // Start live speech recognition
+    if (speechService.isSupported()) {
+      speechService.start(
+        (liveText) => setTranscript(liveText),
+        (err) => {
+          console.warn('Speech recognition notice:', err);
+          if (err.includes('not-allowed')) {
+            setErrorMsg('Microphone access was denied. Please allow microphone permissions.');
+          }
+        }
+      );
+    } else {
+      setErrorMsg('Live Speech Recognition is not supported in this browser. Please use Chrome or Edge.');
+    }
 
+    // Start countdown timer
     speakTimerRef.current = setInterval(() => {
       setSpeakTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(speakTimerRef.current);
-          handleEndSession();
+          handleAutoEndSpeaking();
           return 0;
         }
         return prev - 1;
       });
+      setTotalSpokenSeconds(prev => prev + 1);
     }, 1000);
   };
 
-  /* ── Interview: next question ── */
-  const handleNextInterviewQuestion = () => {
-    const currentAnswer = transcript;
-    setInterviewTranscripts(prev => [
-      ...prev,
-      `Q: ${interviewQuestions[interviewIndex]}\nA: ${currentAnswer}`
-    ]);
-    setTranscript('');
-
-    if (interviewIndex + 1 < interviewQuestions.length) {
-      setInterviewIndex(prev => prev + 1);
+  const handleAutoEndSpeaking = () => {
+    if (activity.id === 'interview' && interviewIndex + 1 < interviewQuestions.length) {
+      handleNextInterviewQuestion();
     } else {
       handleEndSession();
     }
   };
 
-  /* ── End & analyze ── */
-  const handleEndSession = async () => {
-    stopAllTimers();
+  // ── 4. INTERVIEW QUESTION ADVANCE ───────────────────────────────────────────
+  const handleNextInterviewQuestion = () => {
+    const capturedAnswer = speechService.stop();
+    const finalAnswer = capturedAnswer || transcript;
+
+    const updatedAnswers = [
+      ...interviewAnswers,
+      {
+        question: interviewQuestions[interviewIndex],
+        answer: finalAnswer.trim() || '[No answer recorded]'
+      }
+    ];
+    setInterviewAnswers(updatedAnswers);
+
+    if (interviewIndex + 1 < interviewQuestions.length) {
+      setInterviewIndex(prev => prev + 1);
+      setTranscript('');
+      setSpeakTimeLeft(defaultSpeakSecs);
+      setTimeout(() => {
+        speechService.start(
+          (text) => setTranscript(text),
+          (err) => console.warn('Interview speech notice:', err)
+        );
+      }, 300);
+    } else {
+      finalizeInterviewSession(updatedAnswers);
+    }
+  };
+
+  const finalizeInterviewSession = async (allAnswers) => {
+    if (speakTimerRef.current) clearInterval(speakTimerRef.current);
+    speechService.stop();
+    setIsListening(false);
     setPhase('analyzing');
 
-    const finalSpeech =
-      activity.id === 'interview'
-        ? [...interviewTranscripts, `Q: ${interviewQuestions[interviewIndex]}\nA: ${transcript}`].join('\n\n')
-        : transcript; // empty string ⇒ backend returns 0-scores (no fake fallback)
-
-    speechService.stop();
+    const formattedTranscript = allAnswers
+      .map((a, i) => `Q${i + 1}: ${a.question}\nA${i + 1}: ${a.answer}`)
+      .join('\n\n');
 
     try {
-      const duration      = 120 - speakTimeLeft;
-      const savedSession  = await api.createSession({
-        activityType:    'individual',
-        activityName:    activity.name,
-        topic:           currentTopic,
-        durationSeconds: duration > 0 ? duration : 60,
-        transcript:      finalSpeech
+      const savedSession = await api.createSession({
+        activityType: 'individual',
+        activityName: activity.name,
+        topic: currentTopic || 'Behavioral & Technical Job Interview',
+        durationSeconds: totalSpokenSeconds > 0 ? totalSpokenSeconds : 60,
+        transcript: formattedTranscript
       });
       onComplete(savedSession);
     } catch (err) {
-      setErrorMsg(err.message || 'Error running AI analysis');
+      console.error('Error saving interview session:', err);
+      setErrorMsg(err.message || 'Error saving session. Please try again.');
       setPhase('speaking');
     }
   };
 
-  const formatTimer = (s) => {
-    const m = Math.floor(s / 60);
-    return `${String(m).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
+  // ── 5. FINISH NORMAL SESSION ────────────────────────────────────────────────
+  const handleEndSession = async () => {
+    if (speakTimerRef.current) clearInterval(speakTimerRef.current);
+    const finalSpeech = speechService.stop();
+    setIsListening(false);
+    setPhase('analyzing');
+
+    const finalTranscript = finalSpeech || transcript;
+
+    try {
+      const savedSession = await api.createSession({
+        activityType: 'individual',
+        activityName: activity.name,
+        topic: currentTopic,
+        durationSeconds: totalSpokenSeconds > 0 ? totalSpokenSeconds : (defaultSpeakSecs - speakTimeLeft),
+        transcript: finalTranscript
+      });
+      onComplete(savedSession);
+    } catch (err) {
+      console.error('Error saving session:', err);
+      setErrorMsg(err.message || 'Error saving session. Please try again.');
+      setPhase('speaking');
+    }
+  };
+
+  const formatTimer = (secs) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
   const filteredTopics = topicList.filter(t =>
@@ -186,7 +237,7 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
         <button onClick={onBack} className="btn-secondary" style={{ padding: '8px 16px' }}>
           <ArrowLeft size={18} /> Back to Activities
         </button>
-        <span style={{ fontSize: '0.9rem', color: '#9CA3AF', fontWeight: 600 }}>
+        <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>
           Individual Session • {activity.name}
         </span>
       </div>
@@ -195,8 +246,8 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
       <div className="glass-card" style={{ padding: '32px 40px' }}>
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <span style={{ fontSize: '3rem' }}>{activity.icon}</span>
-          <h1 style={{ fontSize: '2rem', fontWeight: 800, marginTop: '10px' }}>{activity.name}</h1>
-          <p style={{ color: '#9CA3AF', fontSize: '1rem', marginTop: '6px', maxWidth: '600px', margin: '6px auto 0' }}>
+          <h1 style={{ fontSize: '2rem', fontWeight: 800, marginTop: '10px', color: 'var(--text-primary)' }}>{activity.name}</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '1rem', marginTop: '6px', maxWidth: '600px', margin: '6px auto 0' }}>
             {activity.desc}
           </p>
         </div>
@@ -209,14 +260,14 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 20px', borderRadius: '9999px', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', color: '#A5B4FC', fontWeight: 700, fontSize: '0.9rem', marginBottom: '10px' }}>
                 🎯 Recommended Topics
               </div>
-              <p style={{ color: '#9CA3AF', fontSize: '0.9rem' }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                 Choose a topic to begin your practice. ({topicList.length} topics available)
               </p>
             </div>
 
             {/* Search bar */}
             <div style={{ position: 'relative', marginBottom: '20px', maxWidth: '480px', margin: '0 auto 20px auto' }}>
-              <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF', pointerEvents: 'none' }} />
+              <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
               <input
                 type="text"
                 className="glass-input"
@@ -227,7 +278,7 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
               />
             </div>
 
-            {/* Topic grid */}
+            {/* Topic grid — High-contrast Theme-Aware Styling */}
             <div style={{
               maxHeight: '420px',
               overflowY: 'auto',
@@ -237,7 +288,7 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
               paddingRight: '4px'
             }}>
               {filteredTopics.length === 0 ? (
-                <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#6B7280', padding: '40px 0', fontSize: '0.92rem' }}>
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: 'var(--text-muted)', padding: '40px 0', fontSize: '0.92rem' }}>
                   No topics match your search. Try a different keyword.
                 </div>
               ) : (
@@ -249,11 +300,11 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
                       textAlign: 'left',
                       padding: '14px 18px',
                       borderRadius: '12px',
-                      background: 'rgba(255,255,255,0.04)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      color: '#E5E7EB',
-                      fontSize: '0.88rem',
-                      fontWeight: 500,
+                      background: 'var(--bg-input)',
+                      border: '1px solid var(--border-glass)',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
                       lineHeight: 1.45,
                       cursor: 'pointer',
                       transition: 'all 0.18s ease',
@@ -262,20 +313,18 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
                       gap: '10px'
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.background = 'rgba(99,102,241,0.18)';
-                      e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)';
-                      e.currentTarget.style.color = '#A5B4FC';
+                      e.currentTarget.style.background = 'rgba(99,102,241,0.15)';
+                      e.currentTarget.style.borderColor = 'var(--primary)';
                     }}
                     onMouseLeave={e => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
-                      e.currentTarget.style.color = '#E5E7EB';
+                      e.currentTarget.style.background = 'var(--bg-input)';
+                      e.currentTarget.style.borderColor = 'var(--border-glass)';
                     }}
                   >
-                    <span style={{ color: '#6366F1', fontWeight: 700, flexShrink: 0, marginTop: '1px' }}>
+                    <span style={{ color: 'var(--primary)', fontWeight: 800, flexShrink: 0, marginTop: '1px', fontSize: '0.82rem' }}>
                       {String(idx + 1).padStart(2, '0')}.
                     </span>
-                    <span>{topic}</span>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{topic}</span>
                   </button>
                 ))
               )}
@@ -296,7 +345,7 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
                   <CheckCircle2 size={13} /> Ready to Practice
                 </span>
               </div>
-              <h3 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#F3F4F6', lineHeight: 1.4 }}>
+              <h3 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4 }}>
                 "{currentTopic}"
               </h3>
               <button
@@ -308,7 +357,7 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
             </div>
 
             <div style={{ textAlign: 'center', padding: '12px 0' }}>
-              <p style={{ color: '#9CA3AF', marginBottom: '24px' }}>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>
                 Make sure your microphone is ready, then start preparation or begin speaking directly.
               </p>
               <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
@@ -329,7 +378,7 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
             {/* Topic reminder */}
             <div style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '14px', padding: '16px 22px', marginBottom: '24px' }}>
               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#A5B4FC', textTransform: 'uppercase' }}>Your Topic</span>
-              <p style={{ margin: '4px 0 0', fontSize: '1.1rem', fontWeight: 700, color: '#F3F4F6' }}>"{currentTopic}"</p>
+              <p style={{ margin: '4px 0 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>"{currentTopic}"</p>
             </div>
 
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
@@ -339,7 +388,7 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
               <div style={{ fontSize: '4rem', fontWeight: 800, color: '#F59E0B', margin: '10px 0 20px', fontFamily: 'monospace' }}>
                 {formatTimer(prepTimeLeft)}
               </div>
-              <p style={{ color: '#9CA3AF', marginBottom: '24px' }}>Organize your thoughts. Speaking phase will auto-start.</p>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>Organize your thoughts. Speaking phase will auto-start.</p>
               <button onClick={handleStartSpeaking} className="btn-primary" style={{ padding: '12px 28px' }}>
                 Skip Prep & Speak Now
               </button>
@@ -357,14 +406,14 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#A5B4FC', textTransform: 'uppercase' }}>
                     AI Interviewer • Question {interviewIndex + 1} of {interviewQuestions.length}
                   </span>
-                  <p style={{ margin: '6px 0 0', fontSize: '1.2rem', fontWeight: 700, color: '#F3F4F6', lineHeight: 1.4 }}>
+                  <p style={{ margin: '6px 0 0', fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4 }}>
                     "{interviewQuestions[interviewIndex]}"
                   </p>
                 </div>
               ) : (
                 <div>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#A5B4FC', textTransform: 'uppercase' }}>Session Topic</span>
-                  <p style={{ margin: '4px 0 0', fontSize: '1.1rem', fontWeight: 700, color: '#F3F4F6' }}>"{currentTopic}"</p>
+                  <p style={{ margin: '4px 0 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>"{currentTopic}"</p>
                 </div>
               )}
             </div>
@@ -372,9 +421,9 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
             {/* Timer + Visualizer row */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
               <AudioVisualizer isActive={true} label="Microphone Active & Recording" />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '10px 20px', borderRadius: '12px' }}>
-                <Clock size={18} color="#6366F1" />
-                <span style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'monospace', color: '#F3F4F6' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-input)', border: '1px solid var(--border-glass)', padding: '10px 20px', borderRadius: '12px' }}>
+                <Clock size={18} color="var(--primary)" />
+                <span style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
                   {formatTimer(speakTimeLeft)}
                 </span>
               </div>
@@ -386,7 +435,7 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
                 <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#A5B4FC' }}>
                   Live Speech Transcript (READ-ONLY)
                 </label>
-                <span style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>🔒 Non-Editable • Driven by Microphone</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>🔒 Non-Editable • Driven by Microphone</span>
               </div>
               <div
                 className="glass-input"
@@ -395,12 +444,12 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
                   maxHeight: '200px',
                   overflowY: 'auto',
                   lineHeight: 1.6,
-                  color: transcript ? '#F3F4F6' : '#6B7280',
+                  color: transcript ? 'var(--text-primary)' : 'var(--text-placeholder)',
                   userSelect: 'none',
                   WebkitUserSelect: 'none',
                   cursor: 'default',
-                  background: 'rgba(15,23,42,0.9)',
-                  border: '1px solid rgba(99,102,241,0.3)',
+                  background: 'var(--bg-input)',
+                  border: '1px solid var(--border-glass)',
                   padding: '16px'
                 }}
               >
@@ -428,8 +477,8 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
             <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(99,102,241,0.2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#818CF8', marginBottom: '20px' }} className="pulse-glow">
               <Sparkles size={32} />
             </div>
-            <h2 style={{ fontSize: '1.8rem', fontWeight: 800 }}>Analyzing Your Speech Performance…</h2>
-            <p style={{ color: '#9CA3AF', marginTop: '8px' }}>
+            <h2 style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>Analyzing Your Speech Performance…</h2>
+            <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>
               Gemini AI is evaluating fluency, grammar, vocabulary, confidence, and topic relevance against "{currentTopic}".
             </p>
           </div>

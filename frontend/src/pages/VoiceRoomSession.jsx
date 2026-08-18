@@ -161,10 +161,10 @@ export const VoiceRoomSession = ({ initialRoom, onLeaveRoom, onSessionFinished }
 
   const handleCompleteGroupSession = async () => {
     if (timerRef.current) clearInterval(timerRef.current);
-    speechService.stop();
+    const finalSpeech = speechService.stop();
     webrtcService.stopAll();
 
-    const cleanMySpeech = (liveTranscript || '').trim();
+    const cleanMySpeech = (finalSpeech || liveTranscript || '').trim();
     const fullTranscript = `Topic: ${room?.topic || 'Group Discussion'}\n` + 
       (cleanMySpeech ? `My Speech: ${cleanMySpeech}\n` : '') + 
       participantTranscripts.map(pt => `${pt.userName}: ${pt.transcript}`).join('\n');

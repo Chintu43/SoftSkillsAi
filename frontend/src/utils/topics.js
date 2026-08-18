@@ -665,3 +665,39 @@ export const recommendedTopics = {
   ]
 
 };
+
+const ACTIVITY_TOPIC_MAP = {
+  'jam': 'jam',
+  'JAM Session': 'jam',
+  'self-intro': 'selfIntroduction',
+  'Self Introduction': 'selfIntroduction',
+  'interview': 'interview',
+  'Interview Practice': 'interview',
+  'storytelling': 'storytelling',
+  'Storytelling': 'storytelling',
+  'impromptu': 'impromptu',
+  'Impromptu Speaking': 'impromptu',
+  'communication': 'communication',
+  'Communication Practice': 'communication',
+  'vocabulary': 'vocabulary',
+  'Vocabulary Practice': 'vocabulary',
+  'situational': 'situational',
+  'Situational Speaking': 'situational',
+  'presentation': 'presentation',
+  'Presentation Practice': 'presentation',
+  'leadership': 'leadership',
+  'Leadership Practice': 'leadership',
+  'confidence': 'confidence',
+  'Confidence Practice': 'confidence',
+  'pronunciation': 'pronunciation',
+  'Pronunciation Practice': 'pronunciation',
+  'ai-voice-debate': 'debate',
+  'AI Voice Debate': 'debate',
+  'Group Discussion': 'groupDiscussion',
+  'Debate': 'debate'
+};
+
+export const getActivityTopics = (name, id) => {
+  const key = ACTIVITY_TOPIC_MAP[id] || ACTIVITY_TOPIC_MAP[name] || 'jam';
+  return recommendedTopics[key] || recommendedTopics.jam;
+};

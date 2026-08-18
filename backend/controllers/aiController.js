@@ -1,4 +1,9 @@
-import { analyzeTranscriptWithGemini, getAICoachResponse, validateCustomTopic } from '../services/geminiService.js';
+import {
+  analyzeTranscriptWithGemini,
+  getAICoachResponse,
+  validateCustomTopic,
+  generateDebateCounterargumentService
+} from '../services/geminiService.js';
 import { Store } from '../services/store.js';
 
 export const validateTopicController = async (req, res) => {
@@ -51,5 +56,21 @@ export const getInterviewQuestions = async (req, res) => {
     res.json({ questions });
   } catch (error) {
     res.status(500).json({ message: 'Error loading interview questions' });
+  }
+};
+
+export const getDebateCounterargument = async (req, res) => {
+  try {
+    const { topic, userArgument, conversationHistory, roundNumber } = req.body;
+    const counterargument = await generateDebateCounterargumentService({
+      topic,
+      userArgument,
+      conversationHistory,
+      roundNumber
+    });
+    res.json({ counterargument, roundNumber });
+  } catch (error) {
+    console.error('Debate counterargument error:', error);
+    res.status(500).json({ message: 'Error generating debate counterargument' });
   }
 };

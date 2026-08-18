@@ -143,5 +143,16 @@ export const api = {
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Failed to fetch interview questions');
     return data;
+  },
+
+  async getDebateCounterargument(topic, userArgument, conversationHistory, roundNumber) {
+    const res = await fetch(`${API_BASE}/ai/debate-counterargument`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ topic, userArgument, conversationHistory, roundNumber })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to generate debate counterargument');
+    return data;
   }
 };

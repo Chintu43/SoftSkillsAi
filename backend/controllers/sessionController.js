@@ -1,38 +1,67 @@
 import { Store } from '../services/store.js';
-import { analyzeTranscriptWithGemini } from '../services/geminiService.js';
+import { evaluateTranscript } from '../services/evaluation/evaluator.js';
+import { getPerformanceLevel } from '../services/evaluation/scoreCalculator.js';
 
 export const createSession = async (req, res) => {
   try {
     const { activityType, activityName, topic, durationSeconds, transcript } = req.body;
-    const userId = req.user.id;
+    const userId   = req.user.id;
     const userName = req.user.name;
 
-    // Perform AI analysis on speech transcript
-    const aiAnalysis = await analyzeTranscriptWithGemini({
+    // --- Run strict rubric-based AI evaluation ---
+    const evaluation = await evaluateTranscript({
       transcript,
       activityName,
       topic,
       activityType
     });
 
+    // Build legacy flat scores from new criteria for backward-compatible dashboard updates
+    // (store.updateUserStats still uses these field names)
+    const flatScores = buildFlatScores(evaluation);
+
     const sessionData = {
       userId,
       userName,
-      activityType: activityType || 'individual',
-      activityName: activityName || 'Practice Session',
-      topic: topic || 'General Topic',
+      activityType:    activityType || 'individual',
+      activityName:    activityName || 'Practice Session',
+      topic:           topic || 'General Topic',
       durationSeconds: durationSeconds || 60,
-      transcript: transcript || '',
-      scores: aiAnalysis.scores,
-      strengths: aiAnalysis.strengths,
-      areasToImprove: aiAnalysis.areasToImprove,
-      mistakes: aiAnalysis.mistakes,
-      aiFeedback: aiAnalysis.aiFeedback
+      transcript:      (transcript || '').trim(),
+
+      // New structured evaluation — stored alongside legacy fields
+      criteria:         evaluation.criteria || [],
+      finalScore:       evaluation.finalScore,
+      performanceLevel: evaluation.performanceLevel,
+      isEmptySpeech:    evaluation.isEmptySpeech || false,
+
+      // Legacy flat scores (dashboard backward compatibility)
+      scores: {
+        overall:        evaluation.finalScore,
+        communication:  flatScores.communication,
+        fluency:        flatScores.fluency,
+        confidence:     flatScores.confidence,
+        grammar:        flatScores.grammar,
+        vocabulary:     flatScores.vocabulary,
+        clarity:        flatScores.clarity,
+        topicRelevance: flatScores.topicRelevance,
+        professionalism: flatScores.professionalism,
+        leadership:     flatScores.leadership,
+        listening:      flatScores.listening,
+        teamwork:       flatScores.teamwork
+      },
+
+      strengths:            evaluation.strengths || [],
+      areasToImprove:       evaluation.areasToImprove || [],
+      positiveObservations: evaluation.positiveObservations || [],
+      mistakeAnalysis:      evaluation.mistakeAnalysis || [],
+      mistakes:             evaluation.mistakeAnalysis || [], // legacy alias
+      aiFeedback:           evaluation.aiFeedback || ''
     };
 
     const session = await Store.createSession(sessionData);
 
-    // Update user profile statistics
+    // Update user dashboard stats (running averages)
     await Store.updateUserStats(userId, sessionData);
 
     res.status(201).json(session);
@@ -64,3 +93,39 @@ export const getSessionById = async (req, res) => {
     res.status(500).json({ message: 'Error retrieving session' });
   }
 };
+
+/**
+ * Map new criteria array back to legacy flat score fields for
+ * Store.updateUserStats and the existing dashboard display.
+ * If a criterion exists, convert its weightedScore to a 0–100 scale.
+ */
+function buildFlatScores(evaluation) {
+  const criteriaList = evaluation.criteria || [];
+
+  const find = (...keys) => {
+    for (const k of keys) {
+      const c = criteriaList.find((x) => x.key === k);
+      if (c) {
+        // Convert weightedScore (out of weight) → percentage (out of 100)
+        if (c.weight > 0) {
+          return Math.min(100, Math.round((c.weightedScore / c.weight) * 100));
+        }
+      }
+    }
+    return evaluation.finalScore || 0;
+  };
+
+  return {
+    communication:  find('communication', 'communicationClarity', 'activeCommunication'),
+    fluency:        find('fluency', 'individualFluency'),
+    confidence:     find('confidence', 'speakingConfidence', 'confidenceDelivery'),
+    grammar:        find('grammar', 'grammarVocabulary', 'sentenceFormation'),
+    vocabulary:     find('vocabulary', 'vocabularyVariety', 'correctUsage'),
+    clarity:        find('clarity', 'communicationClarity'),
+    topicRelevance: find('topicRelevance', 'relevance', 'answerRelevance'),
+    professionalism:find('professionalism'),
+    leadership:     find('leadership', 'initiative'),
+    listening:      find('listening'),
+    teamwork:       find('teamwork', 'collaboration', 'teamCoordination'),
+  };
+}
