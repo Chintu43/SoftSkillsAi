@@ -1,0 +1,9 @@
+pronounce-assess
+fastapi
+uvicorn
+python-multipart
+numpy
+soundfile
+av
+pydub
+scipy

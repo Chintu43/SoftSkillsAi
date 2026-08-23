@@ -1,0 +1,6 @@
+openpronounce
+fastapi
+uvicorn
+python-multipart
+soundfile
+scipy

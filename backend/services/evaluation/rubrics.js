@@ -313,6 +313,7 @@ export const ACTIVITY_TO_RUBRIC_KEY = {
   // Group activity type strings
   'Group Discussion':           'groupDiscussion',
   'Debate':                     'debate',
+  'AI Debate':                  'debate',
   'Team Discussion':            'teamDiscussion',
   'Collaborative Problem Solving': 'collaborativeProblemSolving',
   'Group JAM':                  'groupJAM',
@@ -325,5 +326,18 @@ export const ACTIVITY_TO_RUBRIC_KEY = {
  */
 export const getRubric = (activityName) => {
   const key = ACTIVITY_TO_RUBRIC_KEY[activityName];
-  return key ? RUBRICS[key] : null;
+  if (key && RUBRICS[key]) return RUBRICS[key];
+
+  // Generic fallback: works for any unrecognised activity
+  return {
+    label: activityName || 'General Practice',
+    criteria: [
+      { key: 'fluency',          label: 'Fluency',           weight: 20 },
+      { key: 'grammar',          label: 'Grammar',           weight: 20 },
+      { key: 'vocabulary',       label: 'Vocabulary',        weight: 15 },
+      { key: 'topicRelevance',   label: 'Topic Relevance',   weight: 20 },
+      { key: 'communication',    label: 'Communication',     weight: 15 },
+      { key: 'confidence',       label: 'Confidence',        weight: 10 },
+    ]
+  };
 };

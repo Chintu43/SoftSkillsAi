@@ -415,3 +415,13 @@ textarea::placeholder {
   border-radius: 4px;
   animation: waveBar 1.2s infinite ease-in-out;
 }
+/* Theme toggle label */
+.theme-toggle-label {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .theme-toggle-label {
+    display: inline;
+  }
+}

@@ -8,6 +8,10 @@ const sessionSchema = new mongoose.Schema({
   topic: { type: String },
   durationSeconds: { type: Number, default: 0 },
   transcript: { type: String, default: '' },
+  criteria: { type: Array, default: [] },
+  finalScore: { type: Number, default: 0 },
+  performanceLevel: { type: String, default: 'Good' },
+  isEmptySpeech: { type: Boolean, default: false },
   scores: {
     overall: { type: Number, default: 0 },
     communication: { type: Number, default: 0 },
@@ -18,19 +22,31 @@ const sessionSchema = new mongoose.Schema({
     clarity: { type: Number, default: 0 },
     topicRelevance: { type: Number, default: 0 },
     professionalism: { type: Number, default: 0 },
-    leadership: { type: Number, default: 0 }
+    leadership: { type: Number, default: 0 },
+    listening: { type: Number, default: 0 },
+    teamwork: { type: Number, default: 0 }
   },
   strengths: [{ type: String }],
   areasToImprove: [{ type: String }],
-  mistakes: [
-    {
-      original: String,
-      better: String,
-      reason: String
-    }
-  ],
+  positiveObservations: [{ type: String }],
+  mistakeAnalysis: { type: mongoose.Schema.Types.Mixed, default: {} },
+  mistakes: { type: Array, default: [] },
+  wordMistakes: { type: Array, default: [] },
+  wordAnalysis: { type: Array, default: [] },
+  sentenceAnalysis: { type: Array, default: [] },
+  correctedSpeech: { type: String, default: '' },
+  summary: { type: String, default: '' },
+  hasSpeech: { type: Boolean, default: true },
+  speechDetected: { type: Boolean, default: true },
+  confidence: { type: Number, default: 0 },
+  pronunciationAnalysis: { type: String, default: '' },
+  fluencyDelivery: { type: String, default: '' },
+  topicRelevance: { type: String, default: '' },
+  mentorAdvice: [{ type: String }],
+  errorSummary: { type: mongoose.Schema.Types.Mixed, default: {} },
+  categoryBreakdown: { type: mongoose.Schema.Types.Mixed, default: {} },
   aiFeedback: { type: String },
   createdAt: { type: Date, default: Date.now }
-});
+}, { strict: false });
 
 export default mongoose.model('Session', sessionSchema);

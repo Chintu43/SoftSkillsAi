@@ -1,3 +1,11 @@
+/**
+ * speechRecognition.js — Mobile & Desktop Robust Web Speech API Service
+ *
+ * Designed to eliminate Android/iOS speech duplication during continuous recognition,
+ * preserve legitimate user word repetitions (e.g. "really really"),
+ * and handle seamless background restarts without corrupting or duplicating transcript history.
+ */
+
 class SpeechRecognitionService {
   constructor() {
     this.recognition = null;
@@ -14,191 +22,210 @@ class SpeechRecognitionService {
     this.onErrorCallback = null;
 
     this.restartTimer = null;
+    this.restartCount = 0;
 
     const SpeechRecognition =
-      window.SpeechRecognition ||
-      window.webkitSpeechRecognition;
+      typeof window !== 'undefined'
+        ? (window.SpeechRecognition || window.webkitSpeechRecognition)
+        : null;
 
     if (!SpeechRecognition) {
-      console.warn('Web Speech API is not supported.');
+      console.warn('Web Speech API is not supported in this browser environment.');
       return;
     }
 
     this.recognition = new SpeechRecognition();
 
+    // Standard SpeechRecognition configuration
     this.recognition.continuous = true;
     this.recognition.interimResults = true;
     this.recognition.lang = 'en-US';
     this.recognition.maxAlternatives = 1;
 
     // ----------------------------------------
-    // Recognition started
+    // Recognition start event
     // ----------------------------------------
     this.recognition.onstart = () => {
-      console.log('🎤 Speech recognition started');
       this.isStarting = false;
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🎤 Speech recognition active. Session count:', this.restartCount);
+      }
     };
 
     // ----------------------------------------
-    // Speech results
+    // Speech results processing
     // ----------------------------------------
     this.recognition.onresult = (event) => {
-      let finalText = '';
-      let interimText = '';
+      let newlyFinalizedChunk = '';
+      let currentInterim = '';
 
-      for (
-        let i = event.resultIndex;
-        i < event.results.length;
-        i++
-      ) {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
-
         if (!result || !result[0]) continue;
 
-        const text = result[0].transcript.trim();
-
-        if (!text) continue;
+        const piece = (result[0].transcript || '').trim();
+        if (!piece) continue;
 
         if (result.isFinal) {
-          finalText += text + ' ';
+          newlyFinalizedChunk += (newlyFinalizedChunk ? ' ' : '') + piece;
         } else {
-          interimText += text + ' ';
+          currentInterim += (currentInterim ? ' ' : '') + piece;
         }
       }
 
-      // Store FINAL speech permanently
-      if (finalText.trim()) {
-        this.finalizedTranscript =
-          `${this.finalizedTranscript} ${finalText}`
-            .replace(/\s+/g, ' ')
-            .trim();
-
+      // Process newly finalized speech with boundary overlap deduplication
+      if (newlyFinalizedChunk) {
+        const cleanChunk = newlyFinalizedChunk.trim();
+        this.finalizedTranscript = this._mergeTailOverlap(this.finalizedTranscript, cleanChunk);
         this.interimTranscript = '';
-      }
-
-      // Store current LIVE speech
-      if (interimText.trim()) {
-        this.interimTranscript = interimText.trim();
+      } else {
+        // Update live interim speech (transient, never permanently baked until finalized)
+        this.interimTranscript = currentInterim.trim();
       }
 
       this.updateTranscript();
     };
 
     // ----------------------------------------
-    // Recognition error
+    // Recognition error handling
     // ----------------------------------------
     this.recognition.onerror = (event) => {
-      console.warn(
-        '🎤 Speech recognition error:',
-        event.error
-      );
-
-      // These are normal Chrome events.
-      if (
-        event.error === 'no-speech' ||
-        event.error === 'aborted'
-      ) {
+      // Normal harmless WebSpeech events
+      if (event.error === 'no-speech' || event.error === 'aborted') {
         return;
       }
 
-      if (
-        event.error === 'not-allowed' ||
-        event.error === 'service-not-allowed'
-      ) {
+      console.warn('🎤 Speech recognition error:', event.error);
+
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         this.isListening = false;
         this.shouldRestart = false;
 
         if (this.onErrorCallback) {
-          this.onErrorCallback(
-            'Microphone access denied. Please allow microphone access in Chrome.'
-          );
+          this.onErrorCallback('Microphone access denied. Please enable microphone permissions in your browser settings.');
         }
-
         return;
       }
 
       if (event.error === 'audio-capture') {
         if (this.onErrorCallback) {
-          this.onErrorCallback(
-            'Microphone could not be accessed. Please check your microphone.'
-          );
+          this.onErrorCallback('Microphone could not be accessed. Please check that your microphone is properly connected.');
         }
-
         return;
       }
 
-      // Network errors can happen with Chrome's speech service.
-      // Keep listening and let onend restart it.
+      // Network errors on mobile: let onend trigger a safe restart
       if (event.error === 'network') {
-        console.warn(
-          'Speech recognition network error. Attempting restart...'
-        );
+        console.warn('Speech recognition network blip. Will restart automatically...');
       }
     };
 
     // ----------------------------------------
-    // Recognition stopped
+    // Recognition stopped / session ended
     // ----------------------------------------
     this.recognition.onend = () => {
-      console.log('🎤 Speech recognition ended');
-
       this.isStarting = false;
 
-      // Preserve any current interim speech
-      if (this.interimTranscript.trim()) {
-        this.finalizedTranscript =
-          `${this.finalizedTranscript} ${this.interimTranscript}`
-            .replace(/\s+/g, ' ')
-            .trim();
+      // DO NOT bake interimTranscript into finalizedTranscript during automatic restarts!
+      // On mobile Android/iOS, automatic onend occurs between pauses.
+      // Baking interim text here was the primary cause of duplicated words on mobile.
+      this.interimTranscript = '';
 
-        this.interimTranscript = '';
-
-        this.updateTranscript();
-      }
-
-      // Automatically restart while session is active
-      if (
-        this.isListening &&
-        this.shouldRestart
-      ) {
+      // Automatically restart while user recording is active
+      if (this.isListening && this.shouldRestart) {
+        this.restartCount += 1;
         this.scheduleRestart();
       }
     };
   }
 
-  // ----------------------------------------
-  // Combine final + live transcript
-  // ----------------------------------------
-  updateTranscript() {
-    const finalText =
-      this.finalizedTranscript.trim();
+  /**
+   * Overlapping tail deduplication across WebSpeech restarts.
+   * Prevents boundary duplication on mobile/Chrome restarts while preserving intentional speech repetitions.
+   */
+  _mergeTailOverlap(existingText, incomingText) {
+    if (!existingText || !existingText.trim()) return incomingText.trim();
+    if (!incomingText || !incomingText.trim()) return existingText.trim();
 
-    const liveText =
-      this.interimTranscript.trim();
+    const existing = existingText.trim();
+    const incoming = incomingText.trim();
 
-    if (finalText && liveText) {
-      this.transcript =
-        `${finalText} ${liveText}`;
-    } else if (finalText) {
-      this.transcript = finalText;
-    } else {
-      this.transcript = liveText;
+    const eWords = existing.split(/\s+/);
+    const iWords = incoming.split(/\s+/);
+
+    const eLower = eWords.map(w => w.toLowerCase().replace(/[^\w]/g, ''));
+    const iLower = iWords.map(w => w.toLowerCase().replace(/[^\w]/g, ''));
+
+    let maxOverlap = 0;
+    const maxCheck = Math.min(eWords.length, iWords.length);
+
+    for (let len = maxCheck; len >= 1; len--) {
+      let match = true;
+      for (let k = 0; k < len; k++) {
+        const eWord = eLower[eLower.length - len + k];
+        const iWord = iLower[k];
+        if (eWord !== iWord && eWord !== '' && iWord !== '') {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        maxOverlap = len;
+        break;
+      }
     }
 
-    console.log(
-      '📝 Live transcript:',
-      this.transcript
-    );
+    if (maxOverlap > 0) {
+      if (maxOverlap === iWords.length) {
+        return existing;
+      }
+      const remainder = iWords.slice(maxOverlap).join(' ');
+      return `${existing} ${remainder}`;
+    }
+
+    return `${existing} ${incoming}`;
+  }
+
+  /**
+   * Helper to prevent boundary double-appending across mobile engine restarts
+   */
+  _isDuplicateTail(existingText, newChunk) {
+    if (!existingText || !newChunk) return false;
+    const existing = existingText.toLowerCase().trim();
+    const incoming = newChunk.toLowerCase().trim();
+
+    if (existing === incoming) return true;
+    if (existing.endsWith(incoming)) {
+      const prevChar = existing[existing.length - incoming.length - 1];
+      if (prevChar === undefined || prevChar === ' ' || prevChar === '.' || prevChar === ',') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ----------------------------------------
+  // Combine final + live interim transcript
+  // ----------------------------------------
+  updateTranscript() {
+    const finalPart = this.finalizedTranscript.trim();
+    const interimPart = this.interimTranscript.trim();
+
+    if (finalPart && interimPart) {
+      this.transcript = `${finalPart} ${interimPart}`;
+    } else if (finalPart) {
+      this.transcript = finalPart;
+    } else {
+      this.transcript = interimPart;
+    }
 
     if (this.onTranscriptCallback) {
-      this.onTranscriptCallback(
-        this.transcript
-      );
+      this.onTranscriptCallback(this.transcript);
     }
   }
 
   // ----------------------------------------
-  // Schedule recognition restart
+  // Schedule safe recognition restart
   // ----------------------------------------
   scheduleRestart() {
     if (this.restartTimer) {
@@ -207,91 +234,60 @@ class SpeechRecognitionService {
 
     this.restartTimer = setTimeout(() => {
       this.restartTimer = null;
-
-      if (
-        this.isListening &&
-        this.shouldRestart
-      ) {
+      if (this.isListening && this.shouldRestart) {
         this.startRecognition();
       }
-    }, 300);
+    }, 200);
   }
 
   // ----------------------------------------
-  // Safely start recognition
+  // Safely start recognition instance
   // ----------------------------------------
   startRecognition() {
     if (!this.recognition) return;
-
     if (!this.isListening) return;
-
     if (this.isStarting) return;
 
     try {
       this.isStarting = true;
-
-      console.log(
-        '🎤 Starting speech recognition...'
-      );
-
       this.recognition.start();
     } catch (error) {
       this.isStarting = false;
-
-      console.warn(
-        'Recognition start warning:',
-        error.message
-      );
-
-      // Chrome may say recognition is already started.
-      // Try again shortly.
-      if (this.isListening) {
+      if (this.isListening && this.shouldRestart) {
         this.scheduleRestart();
       }
     }
   }
 
   // ----------------------------------------
-  // Browser support
+  // Browser support check
   // ----------------------------------------
   isSupported() {
     return !!this.recognition;
   }
 
   // ----------------------------------------
-  // Start a NEW speech session
+  // Start a NEW user recording session
   // ----------------------------------------
   start(onTranscript, onError) {
-    console.log(
-      '🎤 Starting NEW speech session'
-    );
-
-    // Stop old restart timer
     if (this.restartTimer) {
       clearTimeout(this.restartTimer);
       this.restartTimer = null;
     }
 
-    // Stop previous recognition
     if (this.recognition) {
       try {
         this.recognition.abort();
-      } catch (error) {
-        // Ignore
-      }
+      } catch (error) {}
     }
 
-    // Reset transcript
     this.finalizedTranscript = '';
     this.interimTranscript = '';
     this.transcript = '';
+    this.restartCount = 0;
 
-    // Set callbacks
-    this.onTranscriptCallback =
-      onTranscript;
-
-    this.onErrorCallback =
-      onError;
+    this.onTranscriptCallback = onTranscript;
+    this.onErrorCallback = onError;
 
     this.isListening = true;
     this.shouldRestart = true;
@@ -299,34 +295,22 @@ class SpeechRecognitionService {
 
     if (!this.recognition) {
       if (onError) {
-        onError(
-          'Speech recognition is not supported in this browser. Please use Google Chrome.'
-        );
+        onError('Speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
       }
-
       return;
     }
 
-    // Small delay prevents Chrome from rejecting
-    // start() immediately after abort().
     setTimeout(() => {
-      if (
-        this.isListening &&
-        this.shouldRestart
-      ) {
+      if (this.isListening && this.shouldRestart) {
         this.startRecognition();
       }
-    }, 150);
+    }, 120);
   }
 
   // ----------------------------------------
-  // Stop speech session
+  // Stop user recording session
   // ----------------------------------------
   stop() {
-    console.log(
-      '🛑 Stopping speech recognition'
-    );
-
     this.isListening = false;
     this.shouldRestart = false;
     this.isStarting = false;
@@ -339,49 +323,31 @@ class SpeechRecognitionService {
     if (this.recognition) {
       try {
         this.recognition.stop();
-      } catch (error) {
-        console.warn(
-          'Recognition stop warning:',
-          error.message
-        );
-      }
+      } catch (error) {}
     }
 
-    // Preserve remaining interim speech
     if (this.interimTranscript.trim()) {
-      this.finalizedTranscript =
-        `${this.finalizedTranscript} ${this.interimTranscript}`
-          .replace(/\s+/g, ' ')
-          .trim();
-
+      const remaining = this.interimTranscript.trim();
+      this.finalizedTranscript = this._mergeTailOverlap(this.finalizedTranscript, remaining);
       this.interimTranscript = '';
     }
 
-    this.transcript =
-      this.finalizedTranscript.trim();
-
-    console.log(
-      '📝 FINAL TRANSCRIPT:',
-      this.transcript
-    );
-
+    this.transcript = this.finalizedTranscript.trim();
     return this.transcript;
   }
 
   // ----------------------------------------
-  // Completely reset
+  // Full reset
   // ----------------------------------------
   reset() {
     this.stop();
-
     this.finalizedTranscript = '';
     this.interimTranscript = '';
     this.transcript = '';
-
     this.onTranscriptCallback = null;
     this.onErrorCallback = null;
+    this.restartCount = 0;
   }
 }
 
-export const speechService =
-  new SpeechRecognitionService();
+export const speechService = new SpeechRecognitionService();

@@ -97,9 +97,15 @@ export const buildZeroResult = (rubric, isEmpty = true) => {
       'Explain your opinion with reasons and examples.',
       'Maintain continuous speech instead of giving only a few words.'
     ],
-    mistakeAnalysis: [],
+    mistakeAnalysis: {
+      status: 'no_speech',
+      issueCount: 0,
+      issues: [],
+      errorMessage: null
+    },
+    mistakes: [],
     aiFeedback:
-      'No meaningful speech was detected. There is not enough evidence to evaluate your soft skills. Please complete a full session with meaningful speech.'
+      'No usable speech was detected, so a meaningful English evaluation could not be performed.'
   };
 };
 
@@ -110,7 +116,7 @@ export const buildZeroResult = (rubric, isEmpty = true) => {
 export const buildInsufficientSpeechResult = (rubric, message = '') => {
   const msg =
     message ||
-    'No meaningful speech was detected. Please speak for a longer duration so the AI can evaluate your performance.';
+    'No usable speech was detected, so a meaningful English evaluation could not be performed.';
 
   const criteria = (rubric?.criteria || []).map((c) => ({
     key: c.key,
@@ -135,7 +141,13 @@ export const buildInsufficientSpeechResult = (rubric, message = '') => {
       'Explain your opinion with reasons and examples.',
       'Maintain continuous speech instead of giving only a few words.'
     ],
-    mistakeAnalysis: [],
+    mistakeAnalysis: {
+      status: 'no_speech',
+      issueCount: 0,
+      issues: [],
+      errorMessage: null
+    },
+    mistakes: [],
     aiFeedback: msg
   };
 };

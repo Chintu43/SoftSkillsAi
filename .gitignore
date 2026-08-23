@@ -2,3 +2,7 @@
 dist/
 .env
 .env.*
+
+backend/pronunciation-service/openpronounce-test/venv/
+backend/pronunciation-service/**/__pycache__/
+*.pyc

@@ -8,6 +8,8 @@ export const createSession = async (req, res) => {
     const userId   = req.user.id;
     const userName = req.user.name;
 
+    console.log("EVALUATION TRANSCRIPT:", transcript);
+
     // --- Run strict rubric-based AI evaluation ---
     const evaluation = await evaluateTranscript({
       transcript,
@@ -15,6 +17,12 @@ export const createSession = async (req, res) => {
       topic,
       activityType
     });
+
+    console.log("=== MISTAKE ANALYSIS DEBUG ===");
+    console.log("TRANSCRIPT:", transcript);
+    console.log("RAW ANALYSIS:", evaluation);
+    console.log("PARSED ANALYSIS:", evaluation.mistakeAnalysis);
+    console.log("NORMALIZED MISTAKES:", evaluation.mistakes);
 
     // Build legacy flat scores from new criteria for backward-compatible dashboard updates
     // (store.updateUserStats still uses these field names)
@@ -51,18 +59,34 @@ export const createSession = async (req, res) => {
         teamwork:       flatScores.teamwork
       },
 
-      strengths:            evaluation.strengths || [],
-      areasToImprove:       evaluation.areasToImprove || [],
-      positiveObservations: evaluation.positiveObservations || [],
-      mistakeAnalysis:      evaluation.mistakeAnalysis || [],
-      mistakes:             evaluation.mistakeAnalysis || [], // legacy alias
-      aiFeedback:           evaluation.aiFeedback || ''
+      strengths:             evaluation.strengths || [],
+      areasToImprove:        evaluation.areasToImprove || [],
+      positiveObservations:  evaluation.positiveObservations || [],
+      mistakeAnalysis:       evaluation.mistakeAnalysis || {},
+      mistakes:              evaluation.mistakes || [], // legacy alias
+      aiFeedback:            evaluation.aiFeedback || '',
+      summary:               evaluation.summary || '',
+      hasSpeech:             evaluation.hasSpeech !== undefined ? evaluation.hasSpeech : !evaluation.isEmptySpeech,
+      speechDetected:        evaluation.speechDetected !== undefined ? evaluation.speechDetected : !evaluation.isEmptySpeech,
+      confidence:            evaluation.confidence || 0,
+      wordMistakes:          evaluation.wordMistakes || [],
+      wordAnalysis:          evaluation.wordAnalysis || [],
+      pronunciationAnalysis: evaluation.pronunciationAnalysis || '',
+      fluencyDelivery:       evaluation.fluencyDelivery || '',
+      topicRelevance:        evaluation.topicRelevance || '',
+      mentorAdvice:          evaluation.mentorAdvice || [],
+      sentenceAnalysis:      evaluation.sentenceAnalysis || [],
+      correctedSpeech:       evaluation.correctedSpeech || '',
+      errorSummary:          evaluation.errorSummary || { major: 0, moderate: 0, minor: 0 },
+      categoryBreakdown:     evaluation.categoryBreakdown || {}
     };
 
     const session = await Store.createSession(sessionData);
 
     // Update user dashboard stats (running averages)
     await Store.updateUserStats(userId, sessionData);
+
+    console.log("FINAL RESPONSE:", session);
 
     res.status(201).json(session);
   } catch (error) {
