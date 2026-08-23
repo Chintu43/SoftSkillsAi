@@ -55,4 +55,10 @@ const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
   console.log(`🚀 SkillForge AI Backend Server running on http://localhost:${PORT}`);
+  const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
+  if (geminiKey) {
+    console.log('✅ Gemini API configured successfully');
+  } else {
+    console.warn('⚠️ Gemini API key missing (GEMINI_API_KEY is not set in .env)');
+  }
 });

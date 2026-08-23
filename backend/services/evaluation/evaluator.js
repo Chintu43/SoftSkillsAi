@@ -15,15 +15,16 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getRubric } from './rubrics.js';
 import { calculateScore, buildZeroResult, buildInsufficientSpeechResult } from './scoreCalculator.js';
 
-let genAI = null;
-const apiKey = (process.env.GEMINI_API_KEY || '').trim();
-if (apiKey !== '') {
+const getGenAI = () => {
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) return null;
   try {
-    genAI = new GoogleGenerativeAI(apiKey);
+    return new GoogleGenerativeAI(apiKey);
   } catch (err) {
     console.warn('⚠️ Gemini API init warning:', err.message);
+    return null;
   }
-}
+};
 
 const GENERIC_GREETINGS = new Set([
   'hello', 'hi', 'hey', 'okay', 'ok', 'yes', 'no', 'thanks', 'thank', 'you',
@@ -1272,6 +1273,7 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
   const cleanTranscript = (transcript || '').trim();
   const rubric = getRubric(activityName);
   const userSpokenText = extractUserSpokenContent(cleanTranscript);
+  const genAI = getGenAI();
 
   console.log('\n=======================================================');
   console.log('--- [AI EVALUATOR PIPELINE START] ---');
@@ -1339,7 +1341,7 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
     try {
       console.log('[1] TRANSCRIPT:', userSpokenText);
       console.log('[EVALUATOR] Calling Gemini API for deep linguistic evaluation...');
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
       const prompt = buildEvaluationPrompt(rubric, userSpokenText, activityName, topic, wordCount);
       const response = await model.generateContent(prompt);
       const rawText = response.response.text();
