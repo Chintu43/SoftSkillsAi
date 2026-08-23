@@ -65,6 +65,9 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
 
   if (isEmptySpeech) {
     status = 'no_speech';
+  } else if (session?.aiAnalysisAvailable === false || rawMistakeData?.status === 'error') {
+    status = 'error';
+    analysisErrorMessage = session?.analysisError || rawMistakeData?.errorMessage || 'AI evaluation unavailable. Please try again.';
   } else if (rawMistakeData && typeof rawMistakeData === 'object' && !Array.isArray(rawMistakeData)) {
     // Structured object format: { status, issueCount, issues: [...], errorMessage }
     status = rawMistakeData.status || 'success';
@@ -78,8 +81,7 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
   }
 
   // Fallback: if mistakeAnalysis.issues is empty but session.mistakes has data, use it
-  // This handles sessions saved before the new architecture
-  if (!isEmptySpeech && mistakeAnalysis.length === 0 && Array.isArray(session?.mistakes) && session.mistakes.length > 0) {
+  if (!isEmptySpeech && status === 'success' && mistakeAnalysis.length === 0 && Array.isArray(session?.mistakes) && session.mistakes.length > 0) {
     mistakeAnalysis = session.mistakes.filter(m => m && (m.youSaid || m.original || m.correction));
   }
 

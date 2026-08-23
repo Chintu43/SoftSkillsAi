@@ -1339,7 +1339,7 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
     try {
       console.log('[1] TRANSCRIPT:', userSpokenText);
       console.log('[EVALUATOR] Calling Gemini API for deep linguistic evaluation...');
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
       const prompt = buildEvaluationPrompt(rubric, userSpokenText, activityName, topic, wordCount);
       const response = await model.generateContent(prompt);
       const rawText = response.response.text();
@@ -1350,7 +1350,7 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
 
       const parsed = JSON.parse(raw);
 
-      if (parsed.ratings && typeof parsed.ratings === 'object') {
+      if (parsed) {
         console.log('[EVALUATOR] Gemini response successfully parsed!');
 
         // GEMINI IS THE ONLY AUTHORITY — NO filterValidMistakes(), NO regex/heuristic filtering
@@ -1375,22 +1375,23 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
         console.log('[2] GEMINI MISTAKES:', rawGeminiMistakes);
         console.log('[3] DIRECT GEMINI MISTAKES:', validMistakes);
 
-        const hardGrammarErrorCount = validMistakes.filter(m => !m.isStyleOnly && !m.isTranscriptionArtifact && m.severity === 'major').length;
-        const totalErrorCount = validMistakes.filter(m => !m.isStyleOnly && !m.isTranscriptionArtifact).length;
+        const totalErrorCount = validMistakes.length;
+        const hardGrammarErrorCount = validMistakes.filter(m => m.severity === 'major' || m.severity === 'moderate').length;
 
         const validatedRatings = {};
         rubric.criteria.forEach(c => {
-          let r = Math.min(5, Math.max(0, Math.round(Number(parsed.ratings[c.key] || 0))));
+          let r = Math.min(5, Math.max(0, Math.round(Number(parsed.ratings?.[c.key] || 0))));
           r = Math.min(r, getMaxRatingForWordCount(wordCount, c.key));
 
           if ((c.key.toLowerCase().includes('relevance') || c.key.toLowerCase().includes('topic')) && !hasTopicKeywords) {
             r = Math.min(r, 1);
           }
 
-          if (c.key.toLowerCase().includes('grammar') || c.key.toLowerCase().includes('accuracy')) {
-            if (hardGrammarErrorCount >= 5) r = Math.min(r, 1);
-            else if (hardGrammarErrorCount >= 3) r = Math.min(r, 2);
-            else if (hardGrammarErrorCount >= 1) r = Math.min(r, 3);
+          if (c.key.toLowerCase().includes('grammar') || c.key.toLowerCase().includes('accuracy') || c.key.toLowerCase().includes('fluency') || c.key.toLowerCase().includes('clarity')) {
+            if (totalErrorCount >= 7) r = Math.min(r, 1);
+            else if (totalErrorCount >= 4) r = Math.min(r, 2);
+            else if (totalErrorCount >= 2) r = Math.min(r, 3);
+            else if (totalErrorCount >= 1) r = Math.min(r, 3);
           }
 
           validatedRatings[c.key] = r;
@@ -1398,7 +1399,7 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
 
         const result = calculateScore(rubric, validatedRatings, parsed.evidence || {}, parsed.improvement || {});
         console.log("[FINAL SCORE]:", result.finalScore);
-        const validSentenceAnalysis = filterValidSentenceAnalysis(parsed.sentenceAnalysis, userSpokenText);
+        const validSentenceAnalysis = Array.isArray(parsed.sentenceAnalysis) ? parsed.sentenceAnalysis : [];
         const wordMistakes = Array.isArray(parsed.wordMistakes) && parsed.wordMistakes.length > 0
           ? parsed.wordMistakes.map(wm => ({ ...wm, severity: wm.severity || 'moderate' }))
           : buildWordMistakesFromList(validMistakes);
@@ -1459,6 +1460,8 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
 
         return {
           ...result,
+          aiAnalysisAvailable: true,
+          analysisError: null,
           hasSpeech: true,
           speechDetected: true,
           aiAnalysisCompleted: true,
@@ -1472,7 +1475,7 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
           wordMistakes,
           wordAnalysis: wordMistakes,
           sentenceAnalysis: validSentenceAnalysis,
-          correctedSpeech: typeof parsed.correctedSpeech === 'string' ? parsed.correctedSpeech.trim() : '',
+          correctedSpeech: typeof parsed.correctedSpeech === 'string' ? parsed.correctedSpeech.trim() : userSpokenText,
           errorSummary,
           categoryBreakdown,
           pronunciationAnalysis: parsed.pronunciationAnalysis || 'Pronunciation could not be reliably evaluated from transcript text alone.',
@@ -1486,12 +1489,58 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
       }
     } catch (err) {
       console.warn('⚠️ Gemini evaluation error:', err.message);
-      return fallbackEvaluation(rubric, userSpokenText, activityName, topic, err.message);
+      return {
+        aiAnalysisAvailable: false,
+        analysisError: 'AI evaluation unavailable. Please try again.',
+        finalScore: 0,
+        performanceLevel: 'Poor',
+        hasSpeech: true,
+        speechDetected: true,
+        aiAnalysisCompleted: false,
+        summary: 'AI evaluation unavailable. Please try again.',
+        mistakeAnalysis: {
+          status: 'error',
+          issueCount: 0,
+          issues: [],
+          errorMessage: 'AI evaluation unavailable. Please try again.'
+        },
+        mistakes: [],
+        wordMistakes: [],
+        sentenceAnalysis: [],
+        correctedSpeech: userSpokenText,
+        strengths: [],
+        positiveObservations: [],
+        areasToImprove: ['AI evaluation is currently unavailable. Please try again later.'],
+        mentorAdvice: ['Ensure your API key is configured and check your connection before retrying.']
+      };
     }
   }
 
-  console.warn('⚠️ Gemini API Key not configured — running offline rule-based scanner');
-  return fallbackEvaluation(rubric, userSpokenText, activityName, topic, 'Gemini API key not configured');
+  console.warn('⚠️ Gemini API Key not configured');
+  return {
+    aiAnalysisAvailable: false,
+    analysisError: 'AI evaluation unavailable. Please try again.',
+    finalScore: 0,
+    performanceLevel: 'Poor',
+    hasSpeech: true,
+    speechDetected: true,
+    aiAnalysisCompleted: false,
+    summary: 'AI evaluation unavailable. Please try again.',
+    mistakeAnalysis: {
+      status: 'error',
+      issueCount: 0,
+      issues: [],
+      errorMessage: 'AI evaluation unavailable. Please try again.'
+    },
+    mistakes: [],
+    wordMistakes: [],
+    sentenceAnalysis: [],
+    correctedSpeech: userSpokenText,
+    strengths: [],
+    positiveObservations: [],
+    areasToImprove: ['AI evaluation is currently unavailable. Please try again later.'],
+    mentorAdvice: ['Ensure your API key is configured and check your connection before retrying.']
+  };
 };
 
 function extractAllRawMistakes(parsed) {

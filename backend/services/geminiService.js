@@ -55,7 +55,7 @@ export const validateCustomTopic = async (topic, activityName) => {
 
   if (genAI) {
     try {
-      const model = genAI.getGenerativeAIModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
       const prompt = `
 You are an AI topic validator for a Soft Skills & Communication Training Platform.
 Evaluate if the user topic: "${cleanTopic}" is meaningful, appropriate, safe, and discussable for the activity "${activityName || 'General Practice'}".
@@ -148,7 +148,7 @@ export const generateDebateCounterargumentService = async ({ topic, userArgument
 
   if (genAI) {
     try {
-      const model = genAI.getGenerativeAIModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
       const prompt = `You are an opposing debater participating in a live verbal debate with a human opponent.
 
 DEBATE TOPIC: "${topic || 'General Debate Topic'}"
@@ -210,7 +210,7 @@ export const checkGroupContentSafety = async (transcript, topic) => {
 
   if (genAI && topic) {
     try {
-      const model = genAI.getGenerativeAIModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
       const prompt = `
 Check if the participant speech transcript in a group discussion on topic "${topic}" violates community guidelines (off-topic, vulgar, abusive, personal attacks, or repeated spam).
 
@@ -236,7 +236,7 @@ export const getAICoachResponse = async (userQuestion, userContext) => {
 
   if (genAI) {
     try {
-      const model = genAI.getGenerativeAIModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
       const prompt = `You are SkillForge AI Coach, a world-class communication and soft skills mentor.
 ${contextStr}
 Answer the user's question with actionable, empathetic, and expert advice. Keep it engaging, structured with clear bullet points, and around 150-200 words.
