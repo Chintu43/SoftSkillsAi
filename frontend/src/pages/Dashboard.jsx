@@ -43,16 +43,23 @@ export const Dashboard = ({ onNavigate }) => {
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            <button onClick={() => onNavigate('individual')} className="btn-primary" style={{ padding: '14px 24px' }}>
-              <Play size={18} /> Start Practice
-            </button>
-            <button onClick={() => onNavigate('group')} className="btn-secondary" style={{ padding: '14px 24px' }}>
-              <Users size={18} /> Join Group
-            </button>
-            <button onClick={() => onNavigate('progress')} className="btn-secondary" style={{ padding: '14px 24px' }}>
-              <TrendingUp size={18} /> View Progress
-            </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <button onClick={() => onNavigate('individual')} className="btn-primary" style={{ padding: '14px 24px' }}>
+                <Play size={18} /> Start Practice
+              </button>
+<p className="speech-tip">
+🎧 Pro Tip: Use earphones for clearer voice detection and more accurate feedback.</p>              
+              <button onClick={() => onNavigate('group')} className="btn-secondary" style={{ padding: '14px 24px' }}>
+                <Users size={18} /> Join Group
+              </button>
+              <button onClick={() => onNavigate('progress')} className="btn-secondary" style={{ padding: '14px 24px' }}>
+                <TrendingUp size={18} /> View Progress
+              </button>
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#9CA3AF', display: 'flex', alignItems: 'center', gap: '4px', opacity: 0.85, marginTop: '2px' }}>
+              <span>🎧 Pro Tip: Use earphones for clearer voice detection and more accurate feedback.</span>
+            </div>
           </div>
         </div>
       </div>
