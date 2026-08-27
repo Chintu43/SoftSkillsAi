@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { History, Calendar, Clock, Award, ChevronRight, Eye } from 'lucide-react';
+import { getSessionScore } from '../utils/sessionScores';
+import { History, Calendar, Clock, Eye } from 'lucide-react';
 
 export const ActivityHistory = ({ onViewSession }) => {
   const [sessions, setSessions] = useState([]);
@@ -45,7 +46,10 @@ export const ActivityHistory = ({ onViewSession }) => {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {sessions.map((sess) => {
-            const scores = sess.scores || {};
+            // Use the authoritative score from the session.
+            // 0 is a real, valid score — do NOT fall back to any default number.
+            const score = getSessionScore(sess);
+            const displayScore = score !== null ? score : '—';
             const mainStrength = sess.strengths?.[0] || 'Clear topic focus';
             const mainImprovement = sess.areasToImprove?.[0] || 'Reduce filler words';
 
@@ -58,7 +62,7 @@ export const ActivityHistory = ({ onViewSession }) => {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                   <div style={{ width: '50px', height: '50px', borderRadius: '14px', background: 'rgba(99, 102, 241, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#818CF8', fontWeight: 800, fontSize: '1.2rem' }}>
-                    {scores.overall || 80}
+                    {displayScore}
                   </div>
                   <div>
                     <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F3F4F6' }}>
