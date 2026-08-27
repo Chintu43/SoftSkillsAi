@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LogIn, Mail, Lock, AlertCircle } from 'lucide-react';
 
 export const Login = ({ onNavigate }) => {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -15,7 +17,7 @@ export const Login = ({ onNavigate }) => {
     setLoading(true);
     try {
       await login(email, password);
-      onNavigate('dashboard');
+      navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
@@ -81,7 +83,7 @@ export const Login = ({ onNavigate }) => {
 
         <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '0.88rem', color: '#9CA3AF' }}>
           Don't have an account?{' '}
-          <span onClick={() => onNavigate('register')} style={{ color: '#818CF8', fontWeight: 700, cursor: 'pointer' }}>
+          <span onClick={() => navigate('/register')} style={{ color: '#818CF8', fontWeight: 700, cursor: 'pointer' }}>
             Register here
           </span>
         </div>

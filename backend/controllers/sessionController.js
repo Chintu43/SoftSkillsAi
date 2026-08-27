@@ -111,6 +111,14 @@ export const getSessionById = async (req, res) => {
     if (!session) {
       return res.status(404).json({ message: 'Session not found' });
     }
+
+    const authUserId = (req.user?.id || req.user?.userId || '').toString();
+    const sessionUserId = (session.userId || '').toString();
+
+    if (!authUserId || sessionUserId !== authUserId) {
+      return res.status(403).json({ message: 'Not authorized to access this session' });
+    }
+
     res.json(session);
   } catch (error) {
     console.error('Get session by ID error:', error);

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { UserPlus, User, Mail, Lock, AlertCircle } from 'lucide-react';
 
 export const Register = ({ onNavigate }) => {
   const { register } = useAuth();
+  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,7 +28,7 @@ export const Register = ({ onNavigate }) => {
     setLoading(true);
     try {
       await register(name, email, password);
-      onNavigate('dashboard');
+      navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -124,7 +126,7 @@ export const Register = ({ onNavigate }) => {
 
         <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '0.88rem', color: '#9CA3AF' }}>
           Already have an account?{' '}
-          <span onClick={() => onNavigate('login')} style={{ color: '#818CF8', fontWeight: 700, cursor: 'pointer' }}>
+          <span onClick={() => navigate('/login')} style={{ color: '#818CF8', fontWeight: 700, cursor: 'pointer' }}>
             Sign In
           </span>
         </div>

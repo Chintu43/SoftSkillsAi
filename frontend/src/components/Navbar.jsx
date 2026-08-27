@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
@@ -13,9 +14,43 @@ import {
   Moon
 } from 'lucide-react';
 
+const TAB_TO_PATH = {
+  dashboard:  '/dashboard',
+  individual: '/practice',
+  group:      '/group',
+  progress:   '/progress',
+  history:    '/history',
+  aicoach:    '/coach',
+  profile:    '/profile',
+};
+
 export const Navbar = ({ activeTab, setActiveTab }) => {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Resolve active tab from URL when not explicitly provided
+  const pathToTab = {
+    '/dashboard': 'dashboard',
+    '/practice':  'individual',
+    '/group':     'group',
+    '/progress':  'progress',
+    '/history':   'history',
+    '/coach':     'aicoach',
+    '/profile':   'profile',
+  };
+  const currentPath = '/' + location.pathname.split('/')[1];
+  const resolvedActiveTab = activeTab || pathToTab[currentPath] || 'dashboard';
+
+  const handleNav = (id) => {
+    const path = TAB_TO_PATH[id];
+    if (path) {
+      navigate(path);
+    } else if (setActiveTab) {
+      setActiveTab(id);
+    }
+  };
 
   if (!user) return null;
 
@@ -98,7 +133,7 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
 
         {/* ==================== BRAND ==================== */}
         <div
-          onClick={() => setActiveTab('dashboard')}
+          onClick={() => navigate('/dashboard')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -162,12 +197,12 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
         >
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive = resolvedActiveTab === item.id;
 
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => handleNav(item.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -241,7 +276,7 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
 
           {/* ==================== USER BADGE ==================== */}
           <div
-            onClick={() => setActiveTab('profile')}
+            onClick={() => navigate('/profile')}
             style={{
               display: 'flex',
               alignItems: 'center',

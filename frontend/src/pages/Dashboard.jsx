@@ -1,9 +1,16 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Mic, Users, TrendingUp, Play, ChevronRight, Sparkles } from 'lucide-react';
 
 export const Dashboard = ({ onNavigate }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const nav = (tab) => {
+    const paths = { individual: '/practice', group: '/group', progress: '/progress' };
+    navigate(paths[tab] || `/${tab}`);
+  };
 
   if (!user) return null;
 
@@ -45,15 +52,15 @@ export const Dashboard = ({ onNavigate }) => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-start' }}>
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              <button onClick={() => onNavigate('individual')} className="btn-primary" style={{ padding: '14px 24px' }}>
+              <button onClick={() => nav('individual')} className="btn-primary" style={{ padding: '14px 24px' }}>
                 <Play size={18} /> Start Practice
               </button>
 <p className="speech-tip">
 🎧 Pro Tip: Use earphones for clearer voice detection and more accurate feedback.</p>              
-              <button onClick={() => onNavigate('group')} className="btn-secondary" style={{ padding: '14px 24px' }}>
+              <button onClick={() => nav('group')} className="btn-secondary" style={{ padding: '14px 24px' }}>
                 <Users size={18} /> Join Group
               </button>
-              <button onClick={() => onNavigate('progress')} className="btn-secondary" style={{ padding: '14px 24px' }}>
+              <button onClick={() => nav('progress')} className="btn-secondary" style={{ padding: '14px 24px' }}>
                 <TrendingUp size={18} /> View Progress
               </button>
             </div>
@@ -152,7 +159,7 @@ export const Dashboard = ({ onNavigate }) => {
       {/* Quick Launch Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '24px' }}>
         <div 
-          onClick={() => onNavigate('individual')}
+          onClick={() => nav('individual')}
           className="glass-card glass-card-interactive" 
           style={{ padding: '30px' }}
         >
@@ -169,7 +176,7 @@ export const Dashboard = ({ onNavigate }) => {
         </div>
 
         <div 
-          onClick={() => onNavigate('group')}
+          onClick={() => nav('group')}
           className="glass-card glass-card-interactive" 
           style={{ padding: '30px' }}
         >

@@ -1,7 +1,9 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Mic, Users, Award, TrendingUp, Sparkles, CheckCircle2, ArrowRight, Zap } from 'lucide-react';
 
 export const LandingPage = ({ onNavigate }) => {
+  const navigate = useNavigate();
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 20px 80px 20px' }}>
       
@@ -20,10 +22,10 @@ export const LandingPage = ({ onNavigate }) => {
         </p>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
-          <button onClick={() => onNavigate('register')} className="btn-primary" style={{ padding: '16px 36px', fontSize: '1.05rem' }}>
+          <button onClick={() => navigate('/register')} className="btn-primary" style={{ padding: '16px 36px', fontSize: '1.05rem' }}>
             Start Practicing <ArrowRight size={20} />
           </button>
-          <button onClick={() => onNavigate('register')} className="btn-secondary" style={{ padding: '16px 36px', fontSize: '1.05rem' }}>
+          <button onClick={() => navigate('/register')} className="btn-secondary" style={{ padding: '16px 36px', fontSize: '1.05rem' }}>
             <Users size={20} /> Join a Group
           </button>
         </div>
@@ -127,7 +129,7 @@ export const LandingPage = ({ onNavigate }) => {
       <section style={{ textAlign: 'center', padding: '60px 20px' }} className="glass-card">
         <h2 style={{ fontSize: '2.4rem', fontWeight: 800, marginBottom: '16px' }}>Ready to Master Soft Skills?</h2>
         <p style={{ color: '#9CA3AF', fontSize: '1.1rem', marginBottom: '28px' }}>Join thousands of students and professionals advancing their career communication skills.</p>
-        <button onClick={() => onNavigate('register')} className="btn-primary" style={{ padding: '16px 40px', fontSize: '1.1rem' }}>
+        <button onClick={() => navigate('/register')} className="btn-primary" style={{ padding: '16px 40px', fontSize: '1.1rem' }}>
           Get Started Now <ArrowRight size={20} />
         </button>
       </section>
