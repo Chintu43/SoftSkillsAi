@@ -169,12 +169,20 @@ export const Store = {
     }
   },
 
-  async getSessionById(sessionId) {
+  async getSessionById(sessionId, userId) {
+    if (!sessionId) return null;
     if (getMongoStatus()) {
+      if (userId) {
+        return await Session.findOne({ _id: sessionId, userId: userId.toString() });
+      }
       return await Session.findById(sessionId);
     } else {
       const db = loadFallbackDB();
-      return db.sessions.find(s => s._id.toString() === sessionId.toString()) || null;
+      const session = db.sessions.find(s => s._id.toString() === sessionId.toString());
+      if (session && userId) {
+        return (session.userId && session.userId.toString() === userId.toString()) ? session : null;
+      }
+      return session || null;
     }
   },
 

@@ -107,16 +107,14 @@ export const getUserSessions = async (req, res) => {
 
 export const getSessionById = async (req, res) => {
   try {
-    const session = await Store.getSessionById(req.params.id);
-    if (!session) {
-      return res.status(404).json({ message: 'Session not found' });
+    const authUserId = (req.user?.id || req.user?.userId || '').toString();
+    if (!authUserId) {
+      return res.status(401).json({ message: 'Not authorized' });
     }
 
-    const authUserId = (req.user?.id || req.user?.userId || '').toString();
-    const sessionUserId = (session.userId || '').toString();
-
-    if (!authUserId || sessionUserId !== authUserId) {
-      return res.status(403).json({ message: 'Not authorized to access this session' });
+    const session = await Store.getSessionById(req.params.id, authUserId);
+    if (!session) {
+      return res.status(404).json({ message: 'Session not found' });
     }
 
     res.json(session);
