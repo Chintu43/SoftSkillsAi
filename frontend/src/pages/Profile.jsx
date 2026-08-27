@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
+import { formatImprovementLabel } from '../utils/sessionScores';
 import { Mail } from 'lucide-react';
 
 export const Profile = () => {
@@ -59,21 +60,21 @@ export const Profile = () => {
         <div className="glass-card" style={{ padding: '24px', textAlign: 'center' }}>
           <span style={{ fontSize: '0.82rem', color: '#9CA3AF', fontWeight: 600 }}>Average Score</span>
           <div style={{ fontSize: '2.4rem', fontWeight: 800, color: hasSessions ? '#818CF8' : '#6B7280', marginTop: '8px' }}>
-            {hasSessions ? user.overallScore : 0}
+            {hasSessions ? (user.overallScore ?? 0) : 0}
           </div>
         </div>
 
         <div className="glass-card" style={{ padding: '24px', textAlign: 'center' }}>
           <span style={{ fontSize: '0.82rem', color: '#9CA3AF', fontWeight: 600 }}>Best Score</span>
           <div style={{ fontSize: '2.4rem', fontWeight: 800, color: hasSessions ? '#34D399' : '#6B7280', marginTop: '8px' }}>
-            {hasSessions ? Math.min(98, Math.max(82, (user.overallScore || 0) + 10)) : 0}
+            {hasSessions ? (user.overallScore ?? 0) : 0}
           </div>
         </div>
 
         <div className="glass-card" style={{ padding: '24px', textAlign: 'center' }}>
           <span style={{ fontSize: '0.82rem', color: '#9CA3AF', fontWeight: 600 }}>Improvement</span>
           <div style={{ fontSize: '2.4rem', fontWeight: 800, color: hasSessions ? '#06B6D4' : '#6B7280', marginTop: '8px' }}>
-            +{user.improvementPercentage || 0}%
+            {formatImprovementLabel(user.improvementPercentage)}
           </div>
         </div>
       </div>

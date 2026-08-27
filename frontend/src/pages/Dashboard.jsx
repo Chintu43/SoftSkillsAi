@@ -1,11 +1,26 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../services/api';
+import { getSessionScore, calculateImprovementRate, formatImprovementLabel, getImprovementIndicator } from '../utils/sessionScores';
 import { Mic, Users, TrendingUp, Play, ChevronRight, Sparkles } from 'lucide-react';
 
 export const Dashboard = ({ onNavigate }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [sessions, setSessions] = useState([]);
+
+  useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        const data = await api.getUserSessions();
+        setSessions(data || []);
+      } catch (err) {
+        console.warn('Dashboard fetch sessions notice:', err);
+      }
+    };
+    fetchSessions();
+  }, []);
 
   const nav = (tab) => {
     const paths = { individual: '/practice', group: '/group', progress: '/progress' };
@@ -16,18 +31,33 @@ export const Dashboard = ({ onNavigate }) => {
 
   const hasSessions = (user.sessionsCompleted || 0) > 0;
 
+  // Derive Improvement Rate strictly from actual session Overall Scores (current session vs previous session)
+  let improvementRate = 0;
+  if (sessions.length >= 2) {
+    const currentScore = getSessionScore(sessions[0]);
+    const previousScore = getSessionScore(sessions[1]);
+    improvementRate = calculateImprovementRate(currentScore, previousScore);
+  } else if (sessions.length === 1) {
+    improvementRate = 0;
+  } else {
+    improvementRate = user.improvementPercentage ?? 0;
+  }
+
+  const improvementLabel = formatImprovementLabel(improvementRate);
+  const indicator = getImprovementIndicator(improvementRate);
+
   const scoreMetrics = [
-    { label: 'Communication', score: hasSessions ? (user.communicationScore || 0) : 0, color: '#6366F1' },
-    { label: 'Confidence', score: hasSessions ? (user.confidenceScore || 0) : 0, color: '#06B6D4' },
-    { label: 'Fluency', score: hasSessions ? (user.fluencyScore || 0) : 0, color: '#8B5CF6' },
-    { label: 'Vocabulary', score: hasSessions ? (user.vocabularyScore || 0) : 0, color: '#F59E0B' },
-    { label: 'Grammar', score: hasSessions ? (user.grammarScore || 0) : 0, color: '#10B981' },
-    { label: 'Listening', score: hasSessions ? (user.listeningScore || 0) : 0, color: '#EC4899' },
-    { label: 'Clarity', score: hasSessions ? (user.clarityScore || 0) : 0, color: '#3B82F6' },
-    { label: 'Leadership', score: hasSessions ? (user.leadershipScore || 0) : 0, color: '#84CC16' },
-    { label: 'Teamwork', score: hasSessions ? (user.teamworkScore || 0) : 0, color: '#14B8A6' },
-    { label: 'Critical Thinking', score: hasSessions ? (user.criticalThinkingScore || 0) : 0, color: '#F97316' },
-    { label: 'Topic Relevance', score: hasSessions ? (user.topicRelevanceScore || 0) : 0, color: '#A855F7' }
+    { label: 'Communication', score: hasSessions ? (user.communicationScore ?? 0) : 0, color: '#6366F1' },
+    { label: 'Confidence', score: hasSessions ? (user.confidenceScore ?? 0) : 0, color: '#06B6D4' },
+    { label: 'Fluency', score: hasSessions ? (user.fluencyScore ?? 0) : 0, color: '#8B5CF6' },
+    { label: 'Vocabulary', score: hasSessions ? (user.vocabularyScore ?? 0) : 0, color: '#F59E0B' },
+    { label: 'Grammar', score: hasSessions ? (user.grammarScore ?? 0) : 0, color: '#10B981' },
+    { label: 'Listening', score: hasSessions ? (user.listeningScore ?? 0) : 0, color: '#EC4899' },
+    { label: 'Clarity', score: hasSessions ? (user.clarityScore ?? 0) : 0, color: '#3B82F6' },
+    { label: 'Leadership', score: hasSessions ? (user.leadershipScore ?? 0) : 0, color: '#84CC16' },
+    { label: 'Teamwork', score: hasSessions ? (user.teamworkScore ?? 0) : 0, color: '#14B8A6' },
+    { label: 'Critical Thinking', score: hasSessions ? (user.criticalThinkingScore ?? 0) : 0, color: '#F97316' },
+    { label: 'Topic Relevance', score: hasSessions ? (user.topicRelevanceScore ?? 0) : 0, color: '#A855F7' }
   ];
 
   return (
@@ -77,7 +107,7 @@ export const Dashboard = ({ onNavigate }) => {
           <span style={{ fontSize: '0.85rem', color: '#9CA3AF', fontWeight: 600 }}>Overall Soft Skills Score</span>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '10px' }}>
             <span style={{ fontSize: '2.4rem', fontWeight: 800, color: hasSessions ? '#818CF8' : '#6B7280' }}>
-              {hasSessions ? user.overallScore : 0}
+              {hasSessions ? (user.overallScore ?? 0) : 0}
             </span>
             <span style={{ color: '#9CA3AF', fontSize: '1rem', fontWeight: 600 }}>/ 100</span>
           </div>
@@ -118,11 +148,11 @@ export const Dashboard = ({ onNavigate }) => {
 
         <div className="glass-card" style={{ padding: '24px' }}>
           <span style={{ fontSize: '0.85rem', color: '#9CA3AF', fontWeight: 600 }}>Improvement Rate</span>
-          <div style={{ fontSize: '2.4rem', fontWeight: 800, color: hasSessions ? '#34D399' : '#6B7280', marginTop: '10px' }}>
-            +{user.improvementPercentage || 0}%
+          <div style={{ fontSize: '2.4rem', fontWeight: 800, color: hasSessions ? (improvementRate < 0 ? '#EF4444' : (improvementRate > 0 ? '#34D399' : '#F3F4F6')) : '#6B7280', marginTop: '10px' }}>
+            {improvementLabel}
           </div>
-          <span style={{ fontSize: '0.75rem', color: hasSessions ? '#34D399' : '#9CA3AF', fontWeight: 700, marginTop: '6px', display: 'inline-block' }}>
-            ▲ Based on past evaluation history
+          <span style={{ fontSize: '0.75rem', color: hasSessions ? indicator.color : '#9CA3AF', fontWeight: 700, marginTop: '6px', display: 'inline-block' }}>
+            {indicator.text}
           </span>
         </div>
       </div>

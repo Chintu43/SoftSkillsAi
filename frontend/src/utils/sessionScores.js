@@ -1,8 +1,8 @@
 /**
- * sessionScores.js — Authoritative score reading utility.
+ * sessionScores.js — Authoritative score reading & improvement calculation utility.
  *
  * This is the ONE place in the frontend that knows how to read
- * the evaluation result stored in a session document.
+ * evaluation results and calculate improvement metrics accurately.
  *
  * Architecture:
  *   AI Evaluation → calculateScore() in backend/services/evaluation/scoreCalculator.js
@@ -13,11 +13,12 @@
  *       ↓
  *   getSessionScore()             ← use this everywhere in the frontend
  *   getSessionCategoryScores()    ← use this for Skill Matrix / Progress charts
+ *   calculateImprovementRate()    ← use this for Improvement Rate calculations
  *
  * IMPORTANT RULES:
- *  - 0 is a valid, real score. NEVER use  `score || fallback`  for scores.
- *  - Use  `score ?? fallback`  (nullish coalescing) so that 0 is preserved.
- *  - null / undefined  means "not yet evaluated" — display "—" in the UI.
+ *  - 0 is a valid, real score. NEVER use `score || fallback` for scores.
+ *  - Use `score ?? fallback` (nullish coalescing) so that 0 is preserved.
+ *  - null / undefined means "not yet evaluated" — display "—" in the UI.
  */
 
 /**
@@ -45,7 +46,7 @@ export function getSessionScore(session) {
  * Each value is either a number (0–100) or null (not evaluated).
  *
  * @param {object} session - A session document from the API.
- * @returns {object}  { communication, confidence, fluency, grammar, vocabulary, leadership, clarity, topicRelevance, ... }
+ * @returns {object} { communication, confidence, fluency, grammar, vocabulary, leadership, clarity, topicRelevance, ... }
  */
 export function getSessionCategoryScores(session) {
   const scores = session?.scores ?? {};
@@ -66,32 +67,87 @@ export function getSessionCategoryScores(session) {
 }
 
 /**
- * Calculates improvement percentage between two sessions.
+ * Calculates Improvement Rate between current Overall Score and previous Overall Score.
+ * Formula: Math.round(((current - previous) / previous) * 100)
  *
- * Returns null if either score is unavailable or if the previous score is 0
- * (to avoid a divide-by-zero producing an infinite or misleading percentage).
+ * Rules & Edge Cases:
+ * 1. 0 is a VALID score (never treat 0 as missing or falsy).
+ * 2. Uses nullish checking (??) so 0 is preserved.
+ * 3. Handles division by zero safely without producing NaN or Infinity:
+ *    - If previous === 0:
+ *        - If current === 0 => returns 0
+ *        - If current > 0  => returns 100
+ * 4. If current or previous score is missing/null/undefined/not finite => returns 0.
+ * 5. Returns a rounded integer percentage.
  *
- * @param {number|null} previous - Score from the earlier session.
- * @param {number|null} current  - Score from the later session.
- * @returns {number|null}        - Percentage change, or null if incalculable.
+ * @param {number|null} currentScore
+ * @param {number|null} previousScore
+ * @returns {number} Integer percentage change
  */
-export function calcImprovementPct(previous, current) {
-  if (previous === null || previous === undefined) return null;
-  if (current  === null || current  === undefined) return null;
-  if (previous === 0) return null; // Cannot divide by zero
+export function calculateImprovementRate(currentScore, previousScore) {
+  if (currentScore === null || currentScore === undefined || previousScore === null || previousScore === undefined) {
+    return 0;
+  }
+
+  const current = Number(currentScore);
+  const previous = Number(previousScore);
+
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) {
+    return 0;
+  }
+
+  if (previous === 0) {
+    if (current === 0) return 0;
+    return 100;
+  }
+
   return Math.round(((current - previous) / previous) * 100);
 }
 
 /**
- * Format an improvement percentage for display.
- * Returns "—" when the percentage cannot be calculated.
+ * Formats signed improvement percentage string.
+ * Positive: "+20%"
+ * Zero: "0%"
+ * Negative: "-20%"
  *
- * @param {number|null} pct
+ * @param {number} improvementRate
  * @returns {string}
  */
-export function formatImprovementPct(pct) {
-  if (pct === null || pct === undefined) return '—';
-  if (pct > 0) return `+${pct}%`;
-  if (pct < 0) return `${pct}%`;
-  return '0%';
+export function formatImprovementLabel(improvementRate) {
+  const rate = Number(improvementRate ?? 0);
+  if (rate > 0) return `+${rate}%`;
+  return `${rate}%`;
 }
+
+/**
+ * Returns UI indicator text and color based on improvement rate.
+ * - rate > 0:  "▲ Based on past evaluation history", color: "#34D399"
+ * - rate < 0:  "▼ Compared with past evaluation history", color: "#EF4444"
+ * - rate === 0:"→ No change from past evaluation history", color: "#9CA3AF"
+ *
+ * @param {number} improvementRate
+ * @returns {{ text: string, color: string }}
+ */
+export function getImprovementIndicator(improvementRate) {
+  const rate = Number(improvementRate ?? 0);
+  if (rate > 0) {
+    return {
+      text: "▲ Based on past evaluation history",
+      color: "#34D399"
+    };
+  } else if (rate < 0) {
+    return {
+      text: "▼ Compared with past evaluation history",
+      color: "#EF4444"
+    };
+  } else {
+    return {
+      text: "→ No change from past evaluation history",
+      color: "#9CA3AF"
+    };
+  }
+}
+
+// Backward-compatible alias
+export const calcImprovementPct = calculateImprovementRate;
+export const formatImprovementPct = formatImprovementLabel;

@@ -92,6 +92,18 @@ export const Store = {
   },
 
   async updateUserStats(userId, sessionData) {
+    const userSessions = await this.getUserSessions(userId);
+    let improvementPct = 0;
+    if (userSessions && userSessions.length >= 2) {
+      const currentScore = userSessions[0].finalScore ?? userSessions[0].scores?.overall ?? 0;
+      const previousScore = userSessions[1].finalScore ?? userSessions[1].scores?.overall ?? 0;
+      if (previousScore === 0) {
+        improvementPct = currentScore === 0 ? 0 : 100;
+      } else {
+        improvementPct = Math.round(((currentScore - previousScore) / previousScore) * 100);
+      }
+    }
+
     const updateStatsForUserObj = (user) => {
       user.sessionsCompleted = (user.sessionsCompleted || 0) + 1;
       if (sessionData.activityType === 'group') {
@@ -121,7 +133,7 @@ export const Store = {
       else if (user.overallScore >= 65) user.level = 'Intermediate';
       else user.level = 'Beginner';
 
-      user.improvementPercentage = Math.min(35, Math.round((user.sessionsCompleted * 3.5)));
+      user.improvementPercentage = improvementPct;
     };
 
     if (getMongoStatus()) {
