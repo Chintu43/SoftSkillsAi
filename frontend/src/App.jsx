@@ -154,26 +154,58 @@ function ResultsPageRoute() {
   const { sessionId } = useParams();
   const { refreshUser } = useAuth();
 
-  const [session, setSession] = React.useState(location.state?.session || null);
-  const [loading, setLoading] = React.useState(!session);
+  const [session, setSession] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [notFound, setNotFound] = React.useState(false);
 
   React.useEffect(() => {
-    // Refresh user stats whenever results page mounts
     refreshUser();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useEffect(() => {
-    if (!session && sessionId && sessionId !== 'latest') {
+    const stateSession = location.state?.session;
+    const isStateMatch = stateSession && (
+      sessionId === 'latest' ||
+      (stateSession._id && stateSession._id.toString() === sessionId) ||
+      (stateSession.id && stateSession.id.toString() === sessionId)
+    );
+
+    if (isStateMatch) {
+      setSession(stateSession);
+      setLoading(false);
+      setNotFound(false);
+      return;
+    }
+
+    if (sessionId && sessionId !== 'latest') {
+      setLoading(true);
+      setNotFound(false);
       api.getSessionById(sessionId)
-        .then(data => { setSession(data); setLoading(false); })
-        .catch(() => setLoading(false));
+        .then(data => {
+          if (data && (data._id || data.id)) {
+            setSession(data);
+            setNotFound(false);
+          } else {
+            setSession(null);
+            setNotFound(true);
+          }
+          setLoading(false);
+        })
+        .catch(err => {
+          console.warn('Session fetch failed:', err);
+          setSession(null);
+          setNotFound(true);
+          setLoading(false);
+        });
     } else {
+      setSession(null);
+      setNotFound(true);
       setLoading(false);
     }
-  }, [session, sessionId]);
+  }, [sessionId, location.state]);
 
-  if (loading && !session) {
+  if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', color: 'var(--text-muted)' }}>
         Loading session results…
@@ -181,8 +213,43 @@ function ResultsPageRoute() {
     );
   }
 
-  if (!session) {
-    return <Navigate to="/dashboard" replace />;
+  if (notFound || !session) {
+    return (
+      <div style={{ maxWidth: '600px', margin: '80px auto', padding: '0 20px', textAlign: 'center' }}>
+        <div className="glass-card" style={{ padding: '40px' }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '20px',
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#FCA5A5',
+            marginBottom: '20px'
+          }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <h2 style={{ fontSize: '1.8rem', fontWeight: 800, marginBottom: '10px' }}>Session Not Found</h2>
+          <p style={{ color: '#9CA3AF', fontSize: '0.95rem', marginBottom: '28px', lineHeight: 1.5 }}>
+            The practice session <code style={{ background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: '6px', color: '#818CF8' }}>{sessionId}</code> could not be found or does not belong to your account.
+          </p>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => navigate('/dashboard')} className="btn-primary" style={{ padding: '12px 24px' }}>
+              Back to Dashboard
+            </button>
+            <button onClick={() => navigate('/practice')} className="btn-secondary" style={{ padding: '12px 24px' }}>
+              Start New Practice
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
