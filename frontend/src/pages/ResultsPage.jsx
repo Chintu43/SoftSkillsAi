@@ -4,6 +4,7 @@ import {
   RefreshCw, BarChart2, AlertCircle, Lightbulb, Filter, Sparkles,
   MicOff, Volume2, Compass, BookOpen, UserCheck, Check, Info, FileText
 } from 'lucide-react';
+import { ScoreCoaching } from '../components/ScoreCoaching';
 
 /**
  * ResultsPage — Dynamic Evidence-Grounded Speech Evaluation Report with Deep English Mentor Feedback.
@@ -182,6 +183,14 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
           </p>
         )}
       </div>
+
+      {/* ── Score Explanation & 80+ Coaching Section ── */}
+      {!isEmptySpeech && (
+        <ScoreCoaching
+          session={session}
+          onNewSession={onNewSession}
+        />
+      )}
 
       {/* ── Speech Summary & Transcript Box (if speech exists) ── */}
       {!isEmptySpeech && rawTranscript && (
