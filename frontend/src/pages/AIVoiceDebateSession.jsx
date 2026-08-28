@@ -249,6 +249,7 @@ export const AIVoiceDebateSession = ({ onBack, onComplete }) => {
 
   /* ── 6. END DEBATE & ANALYZE ── */
   const handleFinishDebate = async () => {
+    if (phase === 'analyzing') return;
     stopAllServices();
     setPhase('analyzing');
 

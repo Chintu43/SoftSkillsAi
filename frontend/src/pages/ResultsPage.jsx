@@ -12,6 +12,13 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showFullTranscript, setShowFullTranscript] = useState(false);
 
+  React.useEffect(() => {
+    console.log('[PERF] ResultsPage rendered');
+    if (window.__perfSubmitStart) {
+      console.log(`[PERF] TOTAL: ${Date.now() - window.__perfSubmitStart} ms`);
+    }
+  }, []);
+
   if (!session) return null;
 
   const rawTranscript = (session.transcript || '').trim();

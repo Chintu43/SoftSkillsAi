@@ -31,18 +31,23 @@ export const Dashboard = ({ onNavigate }) => {
 
   const hasSessions = (user.sessionsCompleted || 0) > 0;
 
-  // Derive Improvement Rate strictly from actual session Overall Scores (current session vs previous session)
-  let improvementRate = 0;
-  if (sessions.length >= 2) {
-    const currentScore = getSessionScore(sessions[0]);
-    const previousScore = getSessionScore(sessions[1]);
-    improvementRate = calculateImprovementRate(currentScore, previousScore);
-  } else if (sessions.length === 1) {
-    improvementRate = 0;
-  } else {
-    improvementRate = user.improvementPercentage ?? 0;
+  // Derive Improvement Rate strictly from actual session Overall Scores (skipping failed evaluation runs)
+  let currentScore = null;
+  let previousScore = null;
+
+  for (let i = 0; i < sessions.length; i++) {
+    const sScore = getSessionScore(sessions[i]);
+    if (sScore !== null) {
+      if (currentScore === null) {
+        currentScore = sScore;
+      } else if (previousScore === null) {
+        previousScore = sScore;
+        break;
+      }
+    }
   }
 
+  const improvementRate = calculateImprovementRate(currentScore, previousScore);
   const improvementLabel = formatImprovementLabel(improvementRate);
   const indicator = getImprovementIndicator(improvementRate);
 

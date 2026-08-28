@@ -1341,16 +1341,21 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
     try {
       console.log('[1] TRANSCRIPT:', userSpokenText);
       console.log('[EVALUATOR] Calling Gemini API for deep linguistic evaluation...');
+      console.log('[PERF] Gemini started');
+      const geminiStart = Date.now();
       const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
       const prompt = buildEvaluationPrompt(rubric, userSpokenText, activityName, topic, wordCount);
       const response = await model.generateContent(prompt);
       const rawText = response.response.text();
+      console.log(`[PERF] Gemini completed: ${Date.now() - geminiStart} ms`);
 
+      const parseStart = Date.now();
       let raw = rawText.replace(/^```json/gi, '').replace(/^```/gi, '').replace(/```$/gi, '').trim();
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (jsonMatch) raw = jsonMatch[0];
 
       const parsed = JSON.parse(raw);
+      console.log(`[PERF] Gemini parsing: ${Date.now() - parseStart} ms`);
 
       if (parsed) {
         console.log('[EVALUATOR] Gemini response successfully parsed!');

@@ -168,6 +168,7 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
   };
 
   const finalizeInterviewSession = async (allAnswers) => {
+    if (phase === 'analyzing') return;
     if (speakTimerRef.current) clearInterval(speakTimerRef.current);
     speechService.stop();
     setIsListening(false);
@@ -195,12 +196,15 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
 
   // ── 5. FINISH NORMAL SESSION ────────────────────────────────────────────────
   const handleEndSession = async () => {
+    if (phase === 'analyzing') return;
     if (speakTimerRef.current) clearInterval(speakTimerRef.current);
     const finalSpeech = speechService.stop();
     setIsListening(false);
     setPhase('analyzing');
 
     const finalTranscript = finalSpeech || transcript;
+    console.log('[PERF] Frontend submit started');
+    window.__perfSubmitStart = Date.now();
 
     try {
       const savedSession = await api.createSession({
@@ -210,6 +214,7 @@ export const ActivitySession = ({ activity, onBack, onComplete }) => {
         durationSeconds: totalSpokenSeconds > 0 ? totalSpokenSeconds : (defaultSpeakSecs - speakTimeLeft),
         transcript: finalTranscript
       });
+      console.log(`[PERF] Frontend response received: ${Date.now() - window.__perfSubmitStart} ms`);
       onComplete(savedSession);
     } catch (err) {
       console.error('Error saving session:', err);

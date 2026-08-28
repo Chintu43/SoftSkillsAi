@@ -18,18 +18,32 @@
  * IMPORTANT RULES:
  *  - 0 is a valid, real score. NEVER use `score || fallback` for scores.
  *  - Use `score ?? fallback` (nullish coalescing) so that 0 is preserved.
- *  - null / undefined means "not yet evaluated" — display "—" in the UI.
+ *  - Failed evaluations (analysisError / error status) are NOT valid scores.
+ *  - null / undefined means "not yet evaluated" or "failed evaluation" — display "—" / "N/A".
  */
 
 /**
  * Returns the authoritative overall score for a session.
- * Returns null if the session has not been evaluated yet.
+ * Returns null if the session has not been evaluated yet or if evaluation failed.
+ *
+ * FAILED EVALUATION RULE:
+ * If the session evaluation status is error / aiAnalysisCompleted === false / analysisError is set,
+ * this is NOT a valid score. Returns null so it is not used as a baseline.
  *
  * @param {object} session - A session document from the API.
  * @returns {number|null}
  */
 export function getSessionScore(session) {
   if (!session) return null;
+
+  // Failed evaluation check (not a real score!)
+  if (
+    session.aiAnalysisCompleted === false ||
+    session.analysisError ||
+    session.mistakeAnalysis?.status === 'error'
+  ) {
+    return null;
+  }
 
   // Primary: session.finalScore (set by scoreCalculator.calculateScore)
   if (typeof session.finalScore === 'number') return session.finalScore;
@@ -49,7 +63,20 @@ export function getSessionScore(session) {
  * @returns {object} { communication, confidence, fluency, grammar, vocabulary, leadership, clarity, topicRelevance, ... }
  */
 export function getSessionCategoryScores(session) {
-  const scores = session?.scores ?? {};
+  if (
+    !session ||
+    session.aiAnalysisCompleted === false ||
+    session.analysisError ||
+    session.mistakeAnalysis?.status === 'error'
+  ) {
+    return {
+      communication: null, confidence: null, fluency: null, grammar: null,
+      vocabulary: null, leadership: null, clarity: null, topicRelevance: null,
+      professionalism: null, listening: null, teamwork: null
+    };
+  }
+
+  const scores = session.scores ?? {};
 
   return {
     communication:   typeof scores.communication   === 'number' ? scores.communication   : null,
@@ -70,35 +97,35 @@ export function getSessionCategoryScores(session) {
  * Calculates Improvement Rate between current Overall Score and previous Overall Score.
  * Formula: Math.round(((current - previous) / previous) * 100)
  *
- * Rules & Edge Cases:
- * 1. 0 is a VALID score (never treat 0 as missing or falsy).
- * 2. Uses nullish checking (??) so 0 is preserved.
- * 3. Handles division by zero safely without producing NaN or Infinity:
- *    - If previous === 0:
- *        - If current === 0 => returns 0
- *        - If current > 0  => returns 100
- * 4. If current or previous score is missing/null/undefined/not finite => returns 0.
- * 5. Returns a rounded integer percentage.
+ * ZERO BASELINE & MISSING BASELINE RULE:
+ * - If previousScore === 0 OR previousScore === null/undefined OR currentScore === null/undefined:
+ *   Returns null (DO NOT calculate a percentage, do NOT return 100%, Infinity, or NaN).
  *
  * @param {number|null} currentScore
  * @param {number|null} previousScore
- * @returns {number} Integer percentage change
+ * @returns {number|null} Integer percentage change or null
  */
 export function calculateImprovementRate(currentScore, previousScore) {
-  if (currentScore === null || currentScore === undefined || previousScore === null || previousScore === undefined) {
-    return 0;
+  if (
+    currentScore === null ||
+    currentScore === undefined ||
+    previousScore === null ||
+    previousScore === undefined
+  ) {
+    return null;
   }
 
   const current = Number(currentScore);
   const previous = Number(previousScore);
 
   if (!Number.isFinite(current) || !Number.isFinite(previous)) {
-    return 0;
+    return null;
   }
 
+  // ZERO BASELINE RULE:
+  // If previousScore === 0, DO NOT calculate a percentage. Return null.
   if (previous === 0) {
-    if (current === 0) return 0;
-    return 100;
+    return null;
   }
 
   return Math.round(((current - previous) / previous) * 100);
@@ -106,30 +133,41 @@ export function calculateImprovementRate(currentScore, previousScore) {
 
 /**
  * Formats signed improvement percentage string.
- * Positive: "+20%"
+ * Positive: "+50%"
  * Zero: "0%"
- * Negative: "-20%"
+ * Negative: "-25%"
+ * Missing / Zero baseline (null/undefined): "N/A"
  *
- * @param {number} improvementRate
+ * @param {number|null} improvementRate
  * @returns {string}
  */
 export function formatImprovementLabel(improvementRate) {
-  const rate = Number(improvementRate ?? 0);
+  if (improvementRate === null || improvementRate === undefined) {
+    return "N/A";
+  }
+  const rate = Number(improvementRate);
   if (rate > 0) return `+${rate}%`;
   return `${rate}%`;
 }
 
 /**
  * Returns UI indicator text and color based on improvement rate.
- * - rate > 0:  "▲ Based on past evaluation history", color: "#34D399"
- * - rate < 0:  "▼ Compared with past evaluation history", color: "#EF4444"
- * - rate === 0:"→ No change from past evaluation history", color: "#9CA3AF"
+ * - rate === null/undefined (zero baseline or missing): "No previous baseline", color: "#9CA3AF"
+ * - rate > 0: "▲ Based on past evaluation history", color: "#34D399"
+ * - rate < 0: "▼ Compared with past evaluation history", color: "#EF4444"
+ * - rate === 0: "→ No change from past evaluation history", color: "#9CA3AF"
  *
- * @param {number} improvementRate
+ * @param {number|null} improvementRate
  * @returns {{ text: string, color: string }}
  */
 export function getImprovementIndicator(improvementRate) {
-  const rate = Number(improvementRate ?? 0);
+  if (improvementRate === null || improvementRate === undefined) {
+    return {
+      text: "No previous baseline",
+      color: "#9CA3AF"
+    };
+  }
+  const rate = Number(improvementRate);
   if (rate > 0) {
     return {
       text: "▲ Based on past evaluation history",

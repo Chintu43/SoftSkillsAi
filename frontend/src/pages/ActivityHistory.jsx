@@ -72,9 +72,6 @@ export const ActivityHistory = ({ onViewSession }) => {
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Calendar size={14} /> {new Date(sess.createdAt).toLocaleDateString()}
                       </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Clock size={14} /> {sess.durationSeconds || 60}s
-                      </span>
                       <span style={{ textTransform: 'capitalize', color: sess.activityType === 'group' ? '#C084FC' : '#38BDF8', fontWeight: 700 }}>
                         • {sess.activityType}
                       </span>

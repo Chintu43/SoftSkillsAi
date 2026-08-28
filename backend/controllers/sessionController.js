@@ -3,27 +3,33 @@ import { evaluateTranscript } from '../services/evaluation/evaluator.js';
 import { getPerformanceLevel } from '../services/evaluation/scoreCalculator.js';
 
 export const createSession = async (req, res) => {
+  const reqStart = Date.now();
+  console.log('[PERF] Backend request received');
+
   try {
     const { activityType, activityName, topic, durationSeconds, transcript } = req.body;
     const userId   = req.user.id;
     const userName = req.user.name;
 
-    console.log("EVALUATION TRANSCRIPT:", transcript);
+    const transcriptStart = Date.now();
+    const cleanTx = (transcript || '').trim();
+    console.log(`[PERF] Transcript processing: ${Date.now() - transcriptStart} ms`);
 
     // --- Run strict rubric-based AI evaluation ---
     const evaluation = await evaluateTranscript({
-      transcript,
+      transcript: cleanTx,
       activityName,
       topic,
       activityType
     });
 
     console.log("=== MISTAKE ANALYSIS DEBUG ===");
-    console.log("TRANSCRIPT:", transcript);
+    console.log("TRANSCRIPT:", cleanTx);
     console.log("RAW ANALYSIS:", evaluation);
     console.log("PARSED ANALYSIS:", evaluation.mistakeAnalysis);
     console.log("NORMALIZED MISTAKES:", evaluation.mistakes);
 
+    const postProcessingStart = Date.now();
     // Build legacy flat scores from new criteria for backward-compatible dashboard updates
     // (store.updateUserStats still uses these field names)
     const flatScores = buildFlatScores(evaluation);
@@ -35,7 +41,7 @@ export const createSession = async (req, res) => {
       activityName:    activityName || 'Practice Session',
       topic:           topic || 'General Topic',
       durationSeconds: durationSeconds || 60,
-      transcript:      (transcript || '').trim(),
+      transcript:      cleanTx,
 
       // New structured evaluation — stored alongside legacy fields
       criteria:         evaluation.criteria || [],
@@ -80,15 +86,19 @@ export const createSession = async (req, res) => {
       errorSummary:          evaluation.errorSummary || { major: 0, moderate: 0, minor: 0 },
       categoryBreakdown:     evaluation.categoryBreakdown || {}
     };
+    console.log(`[PERF] Post-processing: ${Date.now() - postProcessingStart} ms`);
 
+    const dbStart = Date.now();
     const session = await Store.createSession(sessionData);
 
     // Update user dashboard stats (running averages)
     await Store.updateUserStats(userId, sessionData);
+    console.log(`[PERF] Database save: ${Date.now() - dbStart} ms`);
 
     console.log("FINAL RESPONSE:", session);
 
     res.status(201).json(session);
+    console.log(`[PERF] Backend response: ${Date.now() - reqStart} ms`);
   } catch (error) {
     console.error('Create session error:', error);
     res.status(500).json({ message: 'Error analyzing and saving session' });
