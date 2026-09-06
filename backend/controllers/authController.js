@@ -83,6 +83,9 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    // Record login timestamp
+    await Store.recordUserLogin(user._id);
+
     const token = generateToken(user._id, user.name, user.email);
 
     // Return the FULL persisted profile so the dashboard immediately shows

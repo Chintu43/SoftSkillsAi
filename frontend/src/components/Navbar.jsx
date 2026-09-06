@@ -11,7 +11,8 @@ import {
   MessageSquareText,
   LogOut,
   Sun,
-  Moon
+  Moon,
+  ShieldCheck
 } from 'lucide-react';
 
 const TAB_TO_PATH = {
@@ -44,6 +45,10 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
   const resolvedActiveTab = activeTab || pathToTab[currentPath] || 'dashboard';
 
   const handleNav = (id) => {
+    if (user?.role === 'admin') {
+      navigate('/admin');
+      return;
+    }
     const path = TAB_TO_PATH[id];
     if (path) {
       navigate(path);
@@ -53,6 +58,8 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
   };
 
   if (!user) return null;
+
+  const isAdmin = user.role === 'admin';
 
   const navItems = [
     {
@@ -133,7 +140,7 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
 
         {/* ==================== BRAND ==================== */}
         <div
-          onClick={() => navigate('/dashboard')}
+          onClick={() => navigate(isAdmin ? '/admin' : '/dashboard')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -144,17 +151,19 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
         >
           <div
             style={{
-              background:
-                'linear-gradient(135deg, #6366F1, #8B5CF6)',
+              background: isAdmin
+                ? 'linear-gradient(135deg, #7C3AED, #A78BFA)'
+                : 'linear-gradient(135deg, #6366F1, #8B5CF6)',
               padding: '10px',
               borderRadius: '12px',
               display: 'flex',
               color: 'white',
-              boxShadow:
-                '0 4px 15px rgba(99,102,241,0.4)'
+              boxShadow: isAdmin
+                ? '0 4px 15px rgba(124,58,237,0.4)'
+                : '0 4px 15px rgba(99,102,241,0.4)'
             }}
           >
-            <Mic size={22} />
+            {isAdmin ? <ShieldCheck size={22} /> : <Mic size={22} />}
           </div>
 
           <div>
@@ -178,7 +187,7 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
                 letterSpacing: '0.05em'
               }}
             >
-              AI Soft Skills Training &amp; Evaluation Platform
+              {isAdmin ? 'System Administration Portal' : 'AI Soft Skills Training & Evaluation Platform'}
             </span>
           </div>
         </div>
@@ -195,46 +204,66 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
             minWidth: 0
           }}
         >
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = resolvedActiveTab === item.id;
+          {isAdmin ? (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 14px',
+                borderRadius: '10px',
+                background: 'rgba(124, 58, 237, 0.15)',
+                border: '1px solid rgba(124, 58, 237, 0.3)',
+                color: '#A78BFA',
+                fontSize: '0.85rem',
+                fontWeight: 700
+              }}
+            >
+              <ShieldCheck size={16} />
+              <span>Admin Console</span>
+            </div>
+          ) : (
+            navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = resolvedActiveTab === item.id;
 
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNav(item.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 12px',
-                  borderRadius: '10px',
-                  border: 'none',
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNav(item.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 12px',
+                    borderRadius: '10px',
+                    border: 'none',
 
-                  background: isActive
-                    ? 'linear-gradient(135deg, rgba(99,102,241,0.22), rgba(139,92,246,0.22))'
-                    : 'transparent',
+                    background: isActive
+                      ? 'linear-gradient(135deg, rgba(99,102,241,0.22), rgba(139,92,246,0.22))'
+                      : 'transparent',
 
-                  color: isActive
-                    ? '#A5B4FC'
-                    : 'var(--text-muted)',
+                    color: isActive
+                      ? '#A5B4FC'
+                      : 'var(--text-muted)',
 
-                  borderBottom: isActive
-                    ? '2px solid #6366F1'
-                    : '2px solid transparent',
+                    borderBottom: isActive
+                      ? '2px solid #6366F1'
+                      : '2px solid transparent',
 
-                  fontWeight: isActive ? 700 : 500,
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <Icon size={15} />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
+                    fontWeight: isActive ? 700 : 500,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <Icon size={15} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })
+          )}
         </div>
 
         {/* ==================== RIGHT SECTION ==================== */}
@@ -268,7 +297,6 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
               <Moon size={15} />
             )}
 
-            {/* FIXED: No @media inside inline style */}
             <span className="theme-toggle-label">
               {isDark ? 'Light' : 'Dark'}
             </span>
@@ -276,7 +304,7 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
 
           {/* ==================== USER BADGE ==================== */}
           <div
-            onClick={() => navigate('/profile')}
+            onClick={() => navigate(isAdmin ? '/admin' : '/profile')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -288,14 +316,15 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
               border: '1px solid var(--border-glass)'
             }}
           >
-            {/* User Avatar */}
+            {/* Avatar */}
             <div
               style={{
                 width: '32px',
                 height: '32px',
                 borderRadius: '50%',
-                background:
-                  'linear-gradient(135deg, #06B6D4, #6366F1)',
+                background: isAdmin
+                  ? 'linear-gradient(135deg, #7C3AED, #A78BFA)'
+                  : 'linear-gradient(135deg, #06B6D4, #6366F1)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -305,12 +334,12 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
                 flexShrink: 0
               }}
             >
-              {user.name
-                ? user.name[0].toUpperCase()
-                : 'U'}
+              {isAdmin
+                ? 'A'
+                : (user.name ? user.name[0].toUpperCase() : 'U')}
             </div>
 
-            {/* User Information */}
+            {/* Information */}
             <div
               style={{
                 display: 'flex',
@@ -325,19 +354,17 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
                   lineHeight: 1.2
                 }}
               >
-                {user.name}
+                {isAdmin ? (user.username || user.name || 'Administrator') : user.name}
               </span>
 
               <span
-                className={`badge-level ${getLevelBadgeClass(
-                  user.level
-                )}`}
+                className={`badge-level ${isAdmin ? 'badge-advanced' : getLevelBadgeClass(user.level)}`}
                 style={{
                   marginTop: '2px',
                   fontSize: '0.63rem'
                 }}
               >
-                {user.level || 'Beginner'}
+                {isAdmin ? 'Administrator' : (user.level || 'Beginner')}
               </span>
             </div>
           </div>

@@ -198,6 +198,41 @@ export const Store = {
     }
   },
 
+  async saveSessionFeedback(sessionId, userId, feedbackData) {
+    if (!sessionId) return null;
+    if (getMongoStatus()) {
+      let session = null;
+      if (sessionId === 'latest' && userId) {
+        session = await Session.findOne({ userId: userId.toString() }).sort({ createdAt: -1 });
+      } else if (userId) {
+        session = await Session.findOne({ _id: sessionId, userId: userId.toString() });
+      } else {
+        session = await Session.findById(sessionId);
+      }
+      if (!session) return null;
+      session.userFeedback = feedbackData;
+      await session.save();
+      return session;
+    } else {
+      const db = loadFallbackDB();
+      let session = null;
+      if (sessionId === 'latest' && userId) {
+        session = db.sessions
+          .filter(s => s.userId && s.userId.toString() === userId.toString())
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
+      } else {
+        session = db.sessions.find(s =>
+          s._id.toString() === sessionId.toString() &&
+          (!userId || (s.userId && s.userId.toString() === userId.toString()))
+        );
+      }
+      if (!session) return null;
+      session.userFeedback = feedbackData;
+      saveFallbackDB(db);
+      return session;
+    }
+  },
+
   // --- ROOMS ---
   async createRoom(roomData) {
     if (getMongoStatus()) {
@@ -239,6 +274,124 @@ export const Store = {
       updateFn(room);
       saveFallbackDB(db);
       return room;
+    }
+  },
+
+  // --- USER LOGIN TRACKING ---
+  async recordUserLogin(userId) {
+    const loginTime = new Date();
+    if (getMongoStatus()) {
+      await User.findByIdAndUpdate(userId, {
+        lastLoginAt: loginTime,
+        hasLoggedIn: true
+      });
+    } else {
+      const db = loadFallbackDB();
+      const user = db.users.find(u => u._id.toString() === userId.toString());
+      if (user) {
+        user.lastLoginAt = loginTime.toISOString();
+        user.hasLoggedIn = true;
+        saveFallbackDB(db);
+      }
+    }
+  },
+
+  // --- ADMIN STATISTICS ---
+  async getAdminStats() {
+    if (getMongoStatus()) {
+      const totalMembers = await User.countDocuments();
+      const loggedInUsers = await User.countDocuments({
+        $or: [
+          { lastLoginAt: { $exists: true, $ne: null } },
+          { hasLoggedIn: true },
+          { sessionsCompleted: { $gt: 0 } }
+        ]
+      });
+      const totalSessions = await Session.countDocuments();
+
+      const sessionsWithFeedback = await Session.find({
+        'userFeedback.rating': { $exists: true, $gte: 1, $lte: 5 }
+      }).sort({ 'userFeedback.createdAt': -1, createdAt: -1 });
+
+      const feedbackCounts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+      let ratingSum = 0;
+
+      const feedbacks = sessionsWithFeedback.map(s => {
+        const rating = Math.min(5, Math.max(1, Math.round(s.userFeedback.rating)));
+        feedbackCounts[rating] = (feedbackCounts[rating] || 0) + 1;
+        ratingSum += rating;
+
+        return {
+          id: s._id,
+          user: s.userName || 'Anonymous',
+          rating,
+          description: s.userFeedback.description || '',
+          session: s.activityName + (s.topic ? ` (${s.topic})` : ''),
+          date: s.userFeedback.createdAt || s.createdAt
+        };
+      });
+
+      const totalFeedbacks = feedbacks.length;
+      const averageRating = totalFeedbacks > 0 ? parseFloat((ratingSum / totalFeedbacks).toFixed(1)) : 0.0;
+
+      return {
+        totalMembers,
+        loggedInUsers,
+        totalSessions,
+        totalFeedbacks,
+        averageRating,
+        feedbackCounts,
+        feedbacks
+      };
+    } else {
+      const db = loadFallbackDB();
+      const users = db.users || [];
+      const sessions = db.sessions || [];
+
+      const totalMembers = users.length;
+      const loggedInUsers = users.filter(u =>
+        u.lastLoginAt || u.hasLoggedIn || (u.sessionsCompleted && u.sessionsCompleted > 0)
+      ).length;
+      const totalSessions = sessions.length;
+
+      const feedbackCounts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+      let ratingSum = 0;
+
+      const sessionsWithFeedback = sessions
+        .filter(s => s.userFeedback && typeof s.userFeedback.rating === 'number' && s.userFeedback.rating >= 1 && s.userFeedback.rating <= 5)
+        .sort((a, b) => {
+          const dateA = new Date(a.userFeedback.createdAt || a.createdAt);
+          const dateB = new Date(b.userFeedback.createdAt || b.createdAt);
+          return dateB - dateA;
+        });
+
+      const feedbacks = sessionsWithFeedback.map(s => {
+        const rating = Math.min(5, Math.max(1, Math.round(s.userFeedback.rating)));
+        feedbackCounts[rating] = (feedbackCounts[rating] || 0) + 1;
+        ratingSum += rating;
+
+        return {
+          id: s._id,
+          user: s.userName || 'Anonymous',
+          rating,
+          description: s.userFeedback.description || '',
+          session: s.activityName + (s.topic ? ` (${s.topic})` : ''),
+          date: s.userFeedback.createdAt || s.createdAt
+        };
+      });
+
+      const totalFeedbacks = feedbacks.length;
+      const averageRating = totalFeedbacks > 0 ? parseFloat((ratingSum / totalFeedbacks).toFixed(1)) : 0.0;
+
+      return {
+        totalMembers,
+        loggedInUsers,
+        totalSessions,
+        totalFeedbacks,
+        averageRating,
+        feedbackCounts,
+        feedbacks
+      };
     }
   }
 };

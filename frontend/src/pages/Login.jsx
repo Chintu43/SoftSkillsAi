@@ -87,6 +87,16 @@ export const Login = ({ onNavigate }) => {
             Register here
           </span>
         </div>
+
+        <div style={{ textAlign: 'center', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: '0.85rem', color: '#6B7280' }}>
+          Are you an administrator?{' '}
+          <span
+            onClick={() => navigate('/admin/login')}
+            style={{ color: '#A78BFA', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '3px' }}
+          >
+            Admin Login
+          </span>
+        </div>
       </div>
     </div>
   );

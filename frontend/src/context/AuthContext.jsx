@@ -18,6 +18,21 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       const token = localStorage.getItem('skillforge_token');
       if (token) {
+        // Admin users are not stored in the regular user DB.
+        // Skip getProfile() for admins — trust the stored JWT payload.
+        const savedRaw = localStorage.getItem('skillforge_user');
+        if (savedRaw) {
+          try {
+            const saved = JSON.parse(savedRaw);
+            if (saved && saved.role === 'admin') {
+              setUser(saved);
+              setLoading(false);
+              return;
+            }
+          } catch (_) { /* ignore parse errors */ }
+        }
+
+        // Regular users: re-fetch full profile so scores are up-to-date.
         try {
           const profile = await api.getProfile();
           setUser(profile);
@@ -62,6 +77,14 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
+  const adminLogin = async (username, password) => {
+    const data = await api.adminLogin(username, password);
+    localStorage.setItem('skillforge_token', data.token);
+    localStorage.setItem('skillforge_user', JSON.stringify(data.user));
+    setUser(data.user);
+    return data;
+  };
+
   const logout = () => {
     // Remove ONLY the auth session keys — never clear all localStorage
     // so that no other persisted data is accidentally wiped.
@@ -83,7 +106,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, adminLogin, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

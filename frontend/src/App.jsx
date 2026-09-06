@@ -27,6 +27,8 @@ import { ProgressDashboard } from './pages/ProgressDashboard';
 import { ActivityHistory } from './pages/ActivityHistory';
 import { AICoach } from './pages/AICoach';
 import { Profile } from './pages/Profile';
+import { AdminLogin } from './pages/AdminLogin';
+import { AdminDashboard } from './pages/AdminDashboard';
 
 // ── Tab-name → route path mapping (same IDs Navbar used before) ──────────────
 const TAB_TO_PATH = {
@@ -46,14 +48,25 @@ const TAB_TO_PATH = {
 function RequireAuth({ children }) {
   const { user, loading } = useAuth();
   if (loading) return null;
-  return user ? children : <Navigate to="/" replace />;
+  if (!user) return <Navigate to="/" replace />;
+  if (user.role === 'admin') return <Navigate to="/admin" replace />;
+  return children;
 }
 
 // ── Redirect logged-in users away from auth pages ───────────────────────────
 function RequireGuest({ children }) {
   const { user, loading } = useAuth();
   if (loading) return null;
-  return !user ? children : <Navigate to="/dashboard" replace />;
+  return !user ? children : <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} replace />;
+}
+
+// ── Require admin role; redirect to /admin/login if not admin ──────────────────────
+function RequireAdmin({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/admin/login" replace />;
+  if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
+  return children;
 }
 
 // ── ActivitySession wrapper: reads activity from router location.state ───────
@@ -311,11 +324,16 @@ function MainApp() {
     '/history':           'history',
     '/coach':             'aicoach',
     '/profile':           'profile',
+    '/admin':             'admin',
   };
   const currentPath = '/' + location.pathname.split('/')[1];
-  const activeTab = pathToTab[currentPath] || 'dashboard';
+  const activeTab = pathToTab[currentPath] || (user?.role === 'admin' ? 'admin' : 'dashboard');
 
   const handleNavbarNavigate = (tab) => {
+    if (user?.role === 'admin') {
+      navigate('/admin');
+      return;
+    }
     const path = TAB_TO_PATH[tab] || '/dashboard';
     navigate(path);
   };
@@ -328,7 +346,7 @@ function MainApp() {
         <Routes>
           {/* Public routes */}
           <Route path="/" element={
-            user ? <Navigate to="/dashboard" replace /> : <LandingPage onNavigate={handleNavbarNavigate} />
+            user ? <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} replace /> : <LandingPage onNavigate={handleNavbarNavigate} />
           } />
           <Route path="/login" element={
             <RequireGuest><Login onNavigate={handleNavbarNavigate} /></RequireGuest>
@@ -336,6 +354,12 @@ function MainApp() {
           <Route path="/register" element={
             <RequireGuest><Register onNavigate={handleNavbarNavigate} /></RequireGuest>
           } />
+
+          {/* Admin routes — completely separate from user session */}
+          <Route path="/admin/login" element={
+            user ? <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} replace /> : <AdminLogin />
+          } />
+          <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
 
           {/* Protected routes */}
           <Route path="/dashboard"          element={<RequireAuth><DashboardRoute /></RequireAuth>} />
@@ -351,7 +375,7 @@ function MainApp() {
           <Route path="/profile"            element={<RequireAuth><Profile /></RequireAuth>} />
 
           {/* Catch-all */}
-          <Route path="*" element={<Navigate to={user ? '/dashboard' : '/'} replace />} />
+          <Route path="*" element={<Navigate to={user ? (user.role === 'admin' ? '/admin' : '/dashboard') : '/'} replace />} />
         </Routes>
       </main>
 

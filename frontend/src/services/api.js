@@ -1,4 +1,4 @@
-const API_BASE = `${import.meta.env.VITE_API_URL}/api`;
+const API_BASE = `${(import.meta.env.VITE_API_URL || '').trim()}/api`;
 
 const getHeaders = () => {
   const token = localStorage.getItem('skillforge_token');
@@ -94,6 +94,18 @@ export const api = {
     return data;
   },
 
+  async submitFeedback({ sessionId, rating, description }) {
+    const targetId = sessionId || 'feedback';
+    const res = await fetch(`${API_BASE}/sessions/${targetId}/feedback`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ sessionId, rating, description })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Unable to submit feedback. Please try again.');
+    return data;
+  },
+
   async createRoom(activityType, topic, maxMembers) {
     const res = await fetch(`${API_BASE}/rooms/create`, {
       method: 'POST',
@@ -153,6 +165,46 @@ export const api = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Failed to generate debate counterargument');
+    return data;
+  },
+
+  async adminLogin(username, password) {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+    } catch {
+      throw new Error('Unable to connect to server.');
+    }
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error('Admin authentication service is unavailable.');
+    }
+    if (!res.ok) throw new Error(data.message || 'Invalid admin credentials.');
+    return data;
+  },
+
+  async getAdminStats() {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/admin/stats`, {
+        headers: getHeaders()
+      });
+    } catch {
+      throw new Error('Unable to connect to server.');
+    }
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error('Admin statistics service is unavailable.');
+    }
+    if (!res.ok) throw new Error(data.message || 'Failed to fetch admin statistics');
     return data;
   }
 };

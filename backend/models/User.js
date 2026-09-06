@@ -21,6 +21,8 @@ const userSchema = new mongoose.Schema({
   individualSessions: { type: Number, default: 0 },
   improvementPercentage: { type: Number, default: 0 },
   level: { type: String, enum: ['Beginner', 'Intermediate', 'Advanced', 'Excellent'], default: 'Beginner' },
+  lastLoginAt: { type: Date },
+  hasLoggedIn: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 

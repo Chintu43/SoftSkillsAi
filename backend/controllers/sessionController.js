@@ -134,6 +134,43 @@ export const getSessionById = async (req, res) => {
   }
 };
 
+export const submitSessionFeedback = async (req, res) => {
+  try {
+    const authUserId = (req.user?.id || req.user?.userId || '').toString();
+    if (!authUserId) {
+      return res.status(401).json({ message: 'Not authorized' });
+    }
+
+    const sessionId = req.params.id || req.body.sessionId;
+    const { rating, description } = req.body;
+
+    const numericRating = Number(rating);
+    if (!numericRating || !Number.isInteger(numericRating) || numericRating < 1 || numericRating > 5) {
+      return res.status(400).json({ message: 'Please select a rating before submitting.' });
+    }
+
+    const feedbackData = {
+      rating: numericRating,
+      description: typeof description === 'string' ? description.trim() : '',
+      createdAt: new Date().toISOString()
+    };
+
+    const session = await Store.saveSessionFeedback(sessionId, authUserId, feedbackData);
+    if (!session) {
+      return res.status(404).json({ message: 'Session not found or unauthorized.' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Feedback submitted successfully.',
+      feedback: feedbackData
+    });
+  } catch (error) {
+    console.error('Submit feedback error:', error);
+    res.status(500).json({ message: 'Error submitting feedback.' });
+  }
+};
+
 /**
  * Map new criteria array back to legacy flat score fields for
  * Store.updateUserStats and the existing dashboard display.

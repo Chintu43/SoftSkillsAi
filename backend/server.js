@@ -9,6 +9,7 @@ import userRoutes from './routes/userRoutes.js';
 import sessionRoutes from './routes/sessionRoutes.js';
 import roomRoutes from './routes/roomRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
 import { setupRoomSockets } from './sockets/roomHandler.js';
 
 dotenv.config();
@@ -31,6 +32,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'SkillForge AI Backend', timestamp: new Date() });

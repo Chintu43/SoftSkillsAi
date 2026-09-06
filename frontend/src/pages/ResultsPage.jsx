@@ -5,6 +5,7 @@ import {
   MicOff, Volume2, Compass, BookOpen, UserCheck, Check, Info, FileText
 } from 'lucide-react';
 import { ScoreCoaching } from '../components/ScoreCoaching';
+import { MandatoryFeedbackModal } from '../components/MandatoryFeedbackModal';
 
 /**
  * ResultsPage — Dynamic Evidence-Grounded Speech Evaluation Report with Deep English Mentor Feedback.
@@ -13,12 +14,42 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showFullTranscript, setShowFullTranscript] = useState(false);
 
+  const sessionId = session?._id || session?.id;
+  const isAlreadyFeedbacked = Boolean(
+    session?.userFeedback ||
+    session?.feedbackSubmitted ||
+    (sessionId && localStorage.getItem(`feedback_submitted_${sessionId}`))
+  );
+  const [isFeedbackSubmitted, setIsFeedbackSubmitted] = useState(isAlreadyFeedbacked);
+
   React.useEffect(() => {
-    console.log('[PERF] ResultsPage rendered');
-    if (window.__perfSubmitStart) {
-      console.log(`[PERF] TOTAL: ${Date.now() - window.__perfSubmitStart} ms`);
+    const isDone = Boolean(
+      session?.userFeedback ||
+      session?.feedbackSubmitted ||
+      (sessionId && localStorage.getItem(`feedback_submitted_${sessionId}`))
+    );
+    setIsFeedbackSubmitted(isDone);
+  }, [sessionId, session?.userFeedback, session?.feedbackSubmitted]);
+
+  const handleFeedbackSuccess = (feedbackData) => {
+    if (sessionId) {
+      localStorage.setItem(`feedback_submitted_${sessionId}`, 'true');
     }
-  }, []);
+    if (session) {
+      session.userFeedback = feedbackData;
+      session.feedbackSubmitted = true;
+    }
+    setIsFeedbackSubmitted(true);
+  };
+
+  React.useEffect(() => {
+    if (isFeedbackSubmitted) {
+      console.log('[PERF] ResultsPage rendered');
+      if (window.__perfSubmitStart) {
+        console.log(`[PERF] TOTAL: ${Date.now() - window.__perfSubmitStart} ms`);
+      }
+    }
+  }, [isFeedbackSubmitted]);
 
   if (!session) return null;
 
@@ -118,6 +149,38 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
     '#F59E0B','#EC4899','#3B82F6','#84CC16',
     '#14B8A6','#F97316','#A855F7','#EF4444'
   ];
+
+  // Mandatory Feedback Lock: Scores & Detailed Results remain completely hidden until feedback is submitted
+  if (!isFeedbackSubmitted) {
+    return (
+      <div style={{ maxWidth: '650px', margin: '60px auto', padding: '0 20px', textAlign: 'center' }}>
+        <div className="glass-card" style={{ padding: '48px 32px' }}>
+          <div style={{
+            width: '64px', height: '64px', borderRadius: '20px',
+            background: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            color: 'white', marginBottom: '16px',
+            boxShadow: '0 8px 24px rgba(99, 102, 241, 0.4)'
+          }}>
+            <Award size={36} />
+          </div>
+          <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+            Your session has been evaluated.
+          </h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '1rem', marginTop: '8px' }}>
+            Evaluation for <strong style={{ color: 'var(--text-primary)' }}>{session.activityName}</strong>
+            {session.topic && <> · Topic: <em>{session.topic}</em></>}
+          </p>
+        </div>
+
+        <MandatoryFeedbackModal
+          sessionId={sessionId}
+          activityName={session.activityName}
+          onFeedbackSuccess={handleFeedbackSuccess}
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: '1050px', margin: '0 auto', padding: '30px 20px 60px' }}>
