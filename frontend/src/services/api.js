@@ -206,5 +206,46 @@ export const api = {
     }
     if (!res.ok) throw new Error(data.message || 'Failed to fetch admin statistics');
     return data;
+  },
+
+  async deleteFeedback(id) {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/admin/feedback/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      });
+    } catch {
+      throw new Error('Unable to connect to server.');
+    }
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error('Failed to delete feedback.');
+    }
+    if (!res.ok) throw new Error(data.message || 'Failed to delete feedback');
+    return data;
+  },
+
+  async clearQuotaAlert() {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/admin/clear-quota-alert`, {
+        method: 'POST',
+        headers: getHeaders()
+      });
+    } catch {
+      throw new Error('Unable to connect to server.');
+    }
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error('Failed to clear quota alert.');
+    }
+    if (!res.ok) throw new Error(data.message || 'Failed to clear quota alert');
+    return data;
   }
 };
+

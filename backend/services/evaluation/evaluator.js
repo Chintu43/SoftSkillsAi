@@ -11,19 +11,154 @@
  *  - Test 7 (Topic Irrelevant): 40–50 (Topic score penalized)
  */
 
+import dns from 'dns';
+import https from 'https';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getRubric } from './rubrics.js';
 import { calculateScore, buildZeroResult, buildInsufficientSpeechResult } from './scoreCalculator.js';
 
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch (e) {}
+
+export let geminiQuotaExceeded = false;
+export let geminiQuotaExceededAt = null;
+
+export const setGeminiQuotaStatus = (isExceeded) => {
+  geminiQuotaExceeded = isExceeded;
+  if (isExceeded) {
+    geminiQuotaExceededAt = new Date().toISOString();
+  } else {
+    geminiQuotaExceededAt = null;
+  }
+};
+
+export const getGeminiQuotaStatus = () => ({
+  quotaExceeded: geminiQuotaExceeded,
+  quotaExceededAt: geminiQuotaExceededAt
+});
+
+const customHttpsFetch = (url, options = {}) => {
+  return new Promise((resolve, reject) => {
+    let headersObj = {};
+    if (options.headers) {
+      if (typeof options.headers.forEach === 'function') {
+        options.headers.forEach((value, key) => {
+          headersObj[key] = value;
+        });
+      } else if (typeof options.headers.entries === 'function') {
+        for (const [key, value] of options.headers.entries()) {
+          headersObj[key] = value;
+        }
+      } else {
+        headersObj = { ...options.headers };
+      }
+    }
+
+    const bodyBuffer = options.body ? Buffer.from(options.body) : null;
+    if (bodyBuffer) {
+      headersObj['Content-Length'] = bodyBuffer.length;
+    }
+
+    const req = https.request(url, {
+      method: options.method || 'GET',
+      headers: headersObj,
+      family: 4
+    }, (res) => {
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => {
+        const bodyText = Buffer.concat(chunks).toString('utf8');
+        resolve({
+          ok: res.statusCode >= 200 && res.statusCode < 300,
+          status: res.statusCode,
+          statusText: res.statusMessage,
+          text: async () => bodyText,
+          json: async () => JSON.parse(bodyText),
+          headers: {
+            get: (name) => res.headers[name.toLowerCase()]
+          }
+        });
+      });
+    });
+
+    req.on('error', reject);
+    if (bodyBuffer) {
+      req.write(bodyBuffer);
+    }
+    req.end();
+  });
+};
+
 const getGenAI = () => {
-  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
   if (!apiKey) return null;
   try {
-    return new GoogleGenerativeAI(apiKey);
+    return new GoogleGenerativeAI(apiKey, { customFetch: customHttpsFetch });
   } catch (err) {
     console.warn('⚠️ Gemini API init warning:', err.message);
     return null;
   }
+};
+
+export const callGeminiWithRetry = async (genAI, prompt) => {
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
+
+  // Primary: Direct HTTPS REST API with family: 4 (IPv4) to bypass Undici IPv6 connect timeout on Windows
+  if (apiKey) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`[EVALUATION] Calling Gemini 3.6 Flash via Direct REST (attempt ${attempt})...`);
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+        const body = JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        });
+
+        const res = await customHttpsFetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body
+        });
+
+        const text = await res.text();
+        const parsedJson = JSON.parse(text);
+        if (parsedJson.error) {
+          throw new Error(parsedJson.error.message || 'Gemini API Error');
+        }
+
+        const resultText = parsedJson.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (resultText && resultText.trim().length > 0) {
+          console.log('[EVALUATION SUCCESS] Direct Gemini REST call succeeded.');
+          return resultText;
+        }
+      } catch (err) {
+        console.warn(`[EVALUATION NOTICE] Direct REST attempt ${attempt} notice:`, err.message);
+        if (attempt < 3) {
+          let delayMs = 5000;
+          const matchSeconds = err.message.match(/retry in ([0-9.]+)\s*s/i);
+          if (matchSeconds && matchSeconds[1]) {
+            const parsedSec = parseFloat(matchSeconds[1]);
+            if (!isNaN(parsedSec) && parsedSec > 0) {
+              delayMs = Math.min(Math.ceil(parsedSec * 1000) + 500, 15000);
+            }
+          }
+          console.log(`[EVALUATION] Rate limit/notice encountered. Waiting ${delayMs} ms before attempt ${attempt + 1}...`);
+          await new Promise(r => setTimeout(r, delayMs));
+        }
+      }
+    }
+  }
+
+  // Fallback: SDK call if direct REST is unavailable
+  if (genAI) {
+    console.log('[EVALUATION] Falling back to GoogleGenerativeAI SDK...');
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' }, { customFetch: customHttpsFetch });
+    const response = await model.generateContent(prompt);
+    const text = response.response?.text();
+    if (text && text.trim().length > 0) return text;
+  }
+
+  throw new Error('Gemini API call failed.');
 };
 
 const GENERIC_GREETINGS = new Set([
@@ -1339,23 +1474,27 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
 
   if (genAI) {
     try {
-      console.log('[1] TRANSCRIPT:', userSpokenText);
-      console.log('[EVALUATOR] Calling Gemini API for deep linguistic evaluation...');
-      console.log('[PERF] Gemini started');
-      const geminiStart = Date.now();
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
-      const prompt = buildEvaluationPrompt(rubric, userSpokenText, activityName, topic, wordCount);
-      const response = await model.generateContent(prompt);
-      const rawText = response.response.text();
-      console.log(`[PERF] Gemini completed: ${Date.now() - geminiStart} ms`);
+      console.log('=======================================================');
+      console.log('--- [AI EVALUATOR PIPELINE START] ---');
+      console.log('[EVALUATION] Request received');
+      console.log('[EVALUATION] Transcript received: YES (length: ' + userSpokenText.length + ')');
+      console.log('[EVALUATION] Gemini API key configured: YES');
+      console.log('=======================================================');
 
+      console.log('[EVALUATION] Gemini request started');
+      const geminiStart = Date.now();
+      const prompt = buildEvaluationPrompt(rubric, userSpokenText, activityName, topic, wordCount);
+      const rawText = await callGeminiWithRetry(genAI, prompt);
+      console.log(`[EVALUATION] Gemini response received in ${Date.now() - geminiStart} ms`);
+
+      console.log('[EVALUATION] Response parsing started');
       const parseStart = Date.now();
       let raw = rawText.replace(/^```json/gi, '').replace(/^```/gi, '').replace(/```$/gi, '').trim();
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (jsonMatch) raw = jsonMatch[0];
 
       const parsed = JSON.parse(raw);
-      console.log(`[PERF] Gemini parsing: ${Date.now() - parseStart} ms`);
+      console.log(`[EVALUATION] Evaluation parsed successfully in ${Date.now() - parseStart} ms`);
 
       if (parsed) {
         console.log('[EVALUATOR] Gemini response successfully parsed!');
@@ -1465,6 +1604,7 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
         console.log('[5] FINAL RESPONSE:', mistakeAnalysisData);
         console.log('[EVALUATOR SUCCESS] Final Score: ' + result.finalScore + ' | Errors Detected: ' + totalErrorCount);
 
+        setGeminiQuotaStatus(false);
         return {
           ...result,
           aiAnalysisAvailable: true,
@@ -1495,21 +1635,31 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
         };
       }
     } catch (err) {
-      console.warn('⚠️ Gemini evaluation error:', err.message);
+      const isRateLimit = err.message.includes('429') || err.message.includes('quota') || err.message.includes('Quota') || err.message.includes('Too Many Requests');
+      if (isRateLimit) {
+        setGeminiQuotaStatus(true);
+      }
+      const userMsg = isRateLimit
+        ? 'AI evaluation quota limit reached. Please try again in a few minutes.'
+        : 'AI evaluation unavailable. Please try again.';
+      const adviceMsg = isRateLimit
+        ? 'The Gemini API free-tier daily limit has been reached. Please wait a minute and try again, or upgrade your API plan at https://aistudio.google.com.'
+        : 'Ensure your API key is configured and your network connection is stable before retrying.';
+      console.warn('⚠️ Gemini evaluation error:', isRateLimit ? '[RATE LIMIT 429]' : '[CONNECTION ERROR]', err.message.substring(0, 120));
       return {
         aiAnalysisAvailable: false,
-        analysisError: 'AI evaluation unavailable. Please try again.',
+        analysisError: userMsg,
         finalScore: 0,
         performanceLevel: 'Poor',
         hasSpeech: true,
         speechDetected: true,
         aiAnalysisCompleted: false,
-        summary: 'AI evaluation unavailable. Please try again.',
+        summary: userMsg,
         mistakeAnalysis: {
           status: 'error',
           issueCount: 0,
           issues: [],
-          errorMessage: 'AI evaluation unavailable. Please try again.'
+          errorMessage: userMsg
         },
         mistakes: [],
         wordMistakes: [],
@@ -1517,27 +1667,27 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
         correctedSpeech: userSpokenText,
         strengths: [],
         positiveObservations: [],
-        areasToImprove: ['AI evaluation is currently unavailable. Please try again later.'],
-        mentorAdvice: ['Ensure your API key is configured and check your connection before retrying.']
+        areasToImprove: [userMsg],
+        mentorAdvice: [adviceMsg]
       };
     }
   }
 
-  console.warn('⚠️ Gemini API Key not configured');
+  console.warn('⚠️ Gemini API Key not configured — set GEMINI_API_KEY in backend/.env');
   return {
     aiAnalysisAvailable: false,
-    analysisError: 'AI evaluation unavailable. Please try again.',
+    analysisError: 'Gemini API key is not configured. Please add GEMINI_API_KEY to your backend .env file.',
     finalScore: 0,
     performanceLevel: 'Poor',
     hasSpeech: true,
     speechDetected: true,
     aiAnalysisCompleted: false,
-    summary: 'AI evaluation unavailable. Please try again.',
+    summary: 'Gemini API key is not configured.',
     mistakeAnalysis: {
       status: 'error',
       issueCount: 0,
       issues: [],
-      errorMessage: 'AI evaluation unavailable. Please try again.'
+      errorMessage: 'Gemini API key is not configured.'
     },
     mistakes: [],
     wordMistakes: [],
@@ -1545,8 +1695,8 @@ export const evaluateTranscript = async ({ transcript, activityName, topic, acti
     correctedSpeech: userSpokenText,
     strengths: [],
     positiveObservations: [],
-    areasToImprove: ['AI evaluation is currently unavailable. Please try again later.'],
-    mentorAdvice: ['Ensure your API key is configured and check your connection before retrying.']
+    areasToImprove: ['AI evaluation requires a valid Gemini API key.'],
+    mentorAdvice: ['Add your GEMINI_API_KEY to the backend .env file and restart the server.']
   };
 };
 

@@ -5,6 +5,7 @@ import { getMongoStatus } from '../config/db.js';
 import User from '../models/User.js';
 import Session from '../models/Session.js';
 import Room from '../models/Room.js';
+import { getGeminiQuotaStatus } from './evaluation/evaluator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -233,6 +234,27 @@ export const Store = {
     }
   },
 
+  async deleteFeedback(sessionId) {
+    if (!sessionId) return false;
+    if (getMongoStatus()) {
+      const session = await Session.findByIdAndUpdate(
+        sessionId,
+        { $unset: { userFeedback: 1 } },
+        { new: true }
+      );
+      return !!session;
+    } else {
+      const db = loadFallbackDB();
+      const session = db.sessions.find(s => s._id && s._id.toString() === sessionId.toString());
+      if (session && session.userFeedback) {
+        delete session.userFeedback;
+        saveFallbackDB(db);
+        return true;
+      }
+      return false;
+    }
+  },
+
   // --- ROOMS ---
   async createRoom(roomData) {
     if (getMongoStatus()) {
@@ -323,25 +345,40 @@ export const Store = {
 
         return {
           id: s._id,
+          sessionId: s._id,
           user: s.userName || 'Anonymous',
+          userName: s.userName || 'Anonymous',
+          userEmail: s.userEmail || '',
           rating,
           description: s.userFeedback.description || '',
-          session: s.activityName + (s.topic ? ` (${s.topic})` : ''),
-          date: s.userFeedback.createdAt || s.createdAt
+          comment: s.userFeedback.description || '',
+          session: (s.activityName || 'Practice Session') + (s.topic ? ` (${s.topic})` : ''),
+          activityName: s.activityName,
+          topic: s.topic,
+          date: s.userFeedback.createdAt || s.createdAt,
+          createdAt: s.userFeedback.createdAt || s.createdAt
         };
       });
 
       const totalFeedbacks = feedbacks.length;
       const averageRating = totalFeedbacks > 0 ? parseFloat((ratingSum / totalFeedbacks).toFixed(1)) : 0.0;
 
+      const quotaInfo = getGeminiQuotaStatus();
+
       return {
         totalMembers,
+        totalUsers: totalMembers,
         loggedInUsers,
         totalSessions,
         totalFeedbacks,
+        totalFeedback: totalFeedbacks,
         averageRating,
+        avgRating: averageRating,
         feedbackCounts,
-        feedbacks
+        feedbacks,
+        feedbackList: feedbacks,
+        geminiQuotaExceeded: quotaInfo.quotaExceeded,
+        geminiQuotaExceededAt: quotaInfo.quotaExceededAt
       };
     } else {
       const db = loadFallbackDB();
@@ -372,25 +409,40 @@ export const Store = {
 
         return {
           id: s._id,
+          sessionId: s._id,
           user: s.userName || 'Anonymous',
+          userName: s.userName || 'Anonymous',
+          userEmail: s.userEmail || '',
           rating,
           description: s.userFeedback.description || '',
-          session: s.activityName + (s.topic ? ` (${s.topic})` : ''),
-          date: s.userFeedback.createdAt || s.createdAt
+          comment: s.userFeedback.description || '',
+          session: (s.activityName || 'Practice Session') + (s.topic ? ` (${s.topic})` : ''),
+          activityName: s.activityName,
+          topic: s.topic,
+          date: s.userFeedback.createdAt || s.createdAt,
+          createdAt: s.userFeedback.createdAt || s.createdAt
         };
       });
 
       const totalFeedbacks = feedbacks.length;
       const averageRating = totalFeedbacks > 0 ? parseFloat((ratingSum / totalFeedbacks).toFixed(1)) : 0.0;
 
+      const quotaInfo = getGeminiQuotaStatus();
+
       return {
         totalMembers,
+        totalUsers: totalMembers,
         loggedInUsers,
         totalSessions,
         totalFeedbacks,
+        totalFeedback: totalFeedbacks,
         averageRating,
+        avgRating: averageRating,
         feedbackCounts,
-        feedbacks
+        feedbacks,
+        feedbackList: feedbacks,
+        geminiQuotaExceeded: quotaInfo.quotaExceeded,
+        geminiQuotaExceededAt: quotaInfo.quotaExceededAt
       };
     }
   }

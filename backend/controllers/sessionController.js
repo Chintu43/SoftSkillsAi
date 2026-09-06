@@ -141,7 +141,8 @@ export const submitSessionFeedback = async (req, res) => {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
-    const sessionId = req.params.id || req.body.sessionId;
+    const rawSessionId = req.params.id || req.body.sessionId;
+    const sessionId = (rawSessionId && rawSessionId !== 'feedback') ? rawSessionId : (req.body.sessionId || 'latest');
     const { rating, description } = req.body;
 
     const numericRating = Number(rating);

@@ -1,8 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { evaluateTranscript } from './evaluation/evaluator.js';
+import { evaluateTranscript, callGeminiWithRetry } from './evaluation/evaluator.js';
 
 const getGenAI = () => {
-  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
   if (!apiKey) return null;
   try {
     return new GoogleGenerativeAI(apiKey);
@@ -58,7 +58,6 @@ export const validateCustomTopic = async (topic, activityName) => {
   const genAI = getGenAI();
   if (genAI) {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
       const prompt = `
 You are an AI topic validator for a Soft Skills & Communication Training Platform.
 Evaluate if the user topic: "${cleanTopic}" is meaningful, appropriate, safe, and discussable for the activity "${activityName || 'General Practice'}".
@@ -73,8 +72,8 @@ Return strictly valid JSON format:
   "message": "This is a valid discussion topic."
 }`;
 
-      const response = await model.generateContent(prompt);
-      const cleanJson = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+      const responseText = await callGeminiWithRetry(genAI, prompt);
+      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleanJson);
       return {
         valid: parsed.valid !== undefined ? parsed.valid : true,
@@ -152,7 +151,6 @@ export const generateDebateCounterargumentService = async ({ topic, userArgument
   const genAI = getGenAI();
   if (genAI) {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
       const prompt = `You are an opposing debater participating in a live verbal debate with a human opponent.
 
 DEBATE TOPIC: "${topic || 'General Debate Topic'}"
@@ -174,8 +172,8 @@ DEBATER INSTRUCTIONS:
 
 Return ONLY the raw spoken counterargument text. No markdown, no "AI Opponent:", no extra headers.`;
 
-      const response = await model.generateContent(prompt);
-      const text = response.response.text().replace(/^AI Opponent:\s*/i, '').trim();
+      const responseText = await callGeminiWithRetry(genAI, prompt);
+      const text = responseText.replace(/^AI Opponent:\s*/i, '').trim();
       if (text) return text;
     } catch (err) {
       console.warn('Gemini debate counterargument error:', err.message);
@@ -215,7 +213,6 @@ export const checkGroupContentSafety = async (transcript, topic) => {
   const genAI = getGenAI();
   if (genAI && topic) {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
       const prompt = `
 Check if the participant speech transcript in a group discussion on topic "${topic}" violates community guidelines (off-topic, vulgar, abusive, personal attacks, or repeated spam).
 
@@ -227,8 +224,8 @@ Return JSON ONLY:
   "reason": "string",
   "warningMessage": "string"
 }`;
-      const response = await model.generateContent(prompt);
-      const cleanJson = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+      const responseText = await callGeminiWithRetry(genAI, prompt);
+      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
       return JSON.parse(cleanJson);
     } catch (e) {}
   }
@@ -242,15 +239,14 @@ export const getAICoachResponse = async (userQuestion, userContext) => {
   const genAI = getGenAI();
   if (genAI) {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
       const prompt = `You are SkillForge AI Coach, a world-class communication and soft skills mentor.
 ${contextStr}
 Answer the user's question with actionable, empathetic, and expert advice. Keep it engaging, structured with clear bullet points, and around 150-200 words.
 
 User Question: "${userQuestion}"`;
 
-      const response = await model.generateContent(prompt);
-      return response.response.text();
+      const responseText = await callGeminiWithRetry(genAI, prompt);
+      return responseText;
     } catch (e) {
       console.warn('AI Coach Gemini error:', e.message);
     }

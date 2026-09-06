@@ -1,8 +1,13 @@
 import express from 'express';
 import http from 'http';
+import dns from 'dns';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch (e) {}
 import { connectDB } from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
