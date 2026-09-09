@@ -168,24 +168,33 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
     hasAutoOpenedRef.current = false;
   }, [validStorageId]);
 
-  // Automatically open Feedback Popup Modal ONLY after completed ResultsPage has rendered & painted
+  // Automatically open Feedback Popup Modal ONLY AFTER results are ready and displayed, waiting 5 seconds
   React.useEffect(() => {
     const rawScore = session?.finalScore ?? session?.scores?.overall;
-    const hasScore = rawScore !== undefined && rawScore !== null;
-    const evaluationFailed = session?.aiAnalysisAvailable === false || status === 'error';
-    const hasCompletedResult = Boolean(session) && hasScore && !evaluationFailed;
+    const hasValidScore = rawScore !== undefined && rawScore !== null;
+    const isEvaluationPending = session?.aiAnalysisCompleted === false;
+    const isEvaluationFailed = session?.aiAnalysisAvailable === false || status === 'error';
 
-    if (hasCompletedResult && !isFeedbackSubmitted && !hasAutoOpenedRef.current) {
-      hasAutoOpenedRef.current = true;
-      setHasAutoOpened(true);
+    // Must be a complete, ready result that is not loading or failed
+    const isResultsDataReady = Boolean(session) && Boolean(realSessionId) && hasValidScore && !isEvaluationPending && !isEvaluationFailed;
 
-      const timer = setTimeout(() => {
-        setShowFeedbackModal(true);
-      }, 300);
-
-      return () => clearTimeout(timer);
+    if (!isResultsDataReady || isFeedbackSubmitted || hasAutoOpenedRef.current) {
+      return;
     }
-  }, [session, isFeedbackSubmitted, status, validStorageId]);
+
+    // Wait 5 seconds after completed results are displayed on screen before automatically opening modal
+    const timer = setTimeout(() => {
+      if (!hasAutoOpenedRef.current) {
+        hasAutoOpenedRef.current = true;
+        setHasAutoOpened(true);
+        setShowFeedbackModal(true);
+      }
+    }, 13000);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [session, isFeedbackSubmitted, status, validStorageId, realSessionId]);
 
   return (
     <div style={{ maxWidth: '1050px', margin: '0 auto', padding: '30px 20px 60px' }}>
