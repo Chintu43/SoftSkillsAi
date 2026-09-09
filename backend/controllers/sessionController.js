@@ -15,12 +15,13 @@ export const createSession = async (req, res) => {
     const cleanTx = (transcript || '').trim();
     console.log(`[PERF] Transcript processing: ${Date.now() - transcriptStart} ms`);
 
-    // --- Run strict rubric-based AI evaluation ---
+    // --- Run strict rubric-based local linguistic evaluation ---
     const evaluation = await evaluateTranscript({
       transcript: cleanTx,
       activityName,
       topic,
-      activityType
+      activityType,
+      durationSeconds
     });
 
     console.log("=== MISTAKE ANALYSIS DEBUG ===");
@@ -194,12 +195,12 @@ function buildFlatScores(evaluation) {
   };
 
   return {
-    communication:  find('communication', 'communicationClarity', 'activeCommunication'),
+    communication:  find('communication', 'contentDepth', 'topicCoverage'),
     fluency:        find('fluency', 'individualFluency'),
-    confidence:     find('confidence', 'speakingConfidence', 'confidenceDelivery'),
+    confidence:     find('confidence', 'fluency', 'speakingConfidence'),
     grammar:        find('grammar', 'grammarVocabulary', 'sentenceFormation'),
     vocabulary:     find('vocabulary', 'vocabularyVariety', 'correctUsage'),
-    clarity:        find('clarity', 'communicationClarity'),
+    clarity:        find('clarity', 'structure', 'communicationClarity'),
     topicRelevance: find('topicRelevance', 'relevance', 'answerRelevance'),
     professionalism:find('professionalism'),
     leadership:     find('leadership', 'initiative'),

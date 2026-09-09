@@ -14,26 +14,31 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showFullTranscript, setShowFullTranscript] = useState(false);
 
-  const sessionId = session?._id || session?.id;
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [hasAutoOpened, setHasAutoOpened] = useState(false);
+
+  const realSessionId = (session?._id || session?.id || '').toString();
+  const validStorageId = realSessionId && realSessionId !== 'latest' ? realSessionId : null;
+
   const isAlreadyFeedbacked = Boolean(
-    session?.userFeedback ||
-    session?.feedbackSubmitted ||
-    (sessionId && localStorage.getItem(`feedback_submitted_${sessionId}`))
+    (session?.userFeedback && typeof session.userFeedback === 'object' && Object.keys(session.userFeedback).length > 0) ||
+    session?.feedbackSubmitted === true ||
+    (validStorageId && localStorage.getItem(`feedback_submitted_${validStorageId}`) === 'true')
   );
   const [isFeedbackSubmitted, setIsFeedbackSubmitted] = useState(isAlreadyFeedbacked);
 
   React.useEffect(() => {
     const isDone = Boolean(
-      session?.userFeedback ||
-      session?.feedbackSubmitted ||
-      (sessionId && localStorage.getItem(`feedback_submitted_${sessionId}`))
+      (session?.userFeedback && typeof session.userFeedback === 'object' && Object.keys(session.userFeedback).length > 0) ||
+      session?.feedbackSubmitted === true ||
+      (validStorageId && localStorage.getItem(`feedback_submitted_${validStorageId}`) === 'true')
     );
     setIsFeedbackSubmitted(isDone);
-  }, [sessionId, session?.userFeedback, session?.feedbackSubmitted]);
+  }, [validStorageId, session?.userFeedback, session?.feedbackSubmitted]);
 
   const handleFeedbackSuccess = (feedbackData) => {
-    if (sessionId) {
-      localStorage.setItem(`feedback_submitted_${sessionId}`, 'true');
+    if (validStorageId) {
+      localStorage.setItem(`feedback_submitted_${validStorageId}`, 'true');
     }
     if (session) {
       session.userFeedback = feedbackData;
@@ -53,13 +58,16 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
 
   if (!session) return null;
 
+  // isEmptySpeech is set definitively by the backend evaluator.
+  // The rawTranscript === '' fallback covers the edge case where session.isEmptySpeech
+  // was not saved (old sessions). Do NOT add score/word-count heuristics here — they
+  // produce false positives for short valid speech and for LT-unavailable sessions.
   const rawTranscript = (session.transcript || '').trim();
   const isEmptySpeech =
     session.isEmptySpeech === true ||
     session.hasSpeech === false ||
     session.speechDetected === false ||
-    rawTranscript === '' ||
-    (session.finalScore === 0 && rawTranscript.split(/\s+/).length <= 3);
+    rawTranscript === '';
 
   // ── Score ──────────────────────────────────────────────────────────────────
   const finalScore = isEmptySpeech ? 0 : (session.finalScore ?? session.scores?.overall ?? 0);
@@ -75,7 +83,10 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
     'Very Good':   '#3b82f6',
     'Good':        '#06b6d4',
     'Average':     '#f59e0b',
+    'Below Average': '#fb923c',
+    'Weak':        '#f97316',
     'Needs Improvement': '#f97316',
+    'Very Poor':   '#ef4444',
     'Poor':        '#ef4444'
   }[performanceLevel] || '#9ca3af';
 
@@ -150,37 +161,31 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
     '#14B8A6','#F97316','#A855F7','#EF4444'
   ];
 
-  // Mandatory Feedback Lock: Scores & Detailed Results remain completely hidden until feedback is submitted
-  if (!isFeedbackSubmitted) {
-    return (
-      <div style={{ maxWidth: '650px', margin: '60px auto', padding: '0 20px', textAlign: 'center' }}>
-        <div className="glass-card" style={{ padding: '48px 32px' }}>
-          <div style={{
-            width: '64px', height: '64px', borderRadius: '20px',
-            background: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white', marginBottom: '16px',
-            boxShadow: '0 8px 24px rgba(99, 102, 241, 0.4)'
-          }}>
-            <Award size={36} />
-          </div>
-          <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-            Your session has been evaluated.
-          </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '1rem', marginTop: '8px' }}>
-            Evaluation for <strong style={{ color: 'var(--text-primary)' }}>{session.activityName}</strong>
-            {session.topic && <> · Topic: <em>{session.topic}</em></>}
-          </p>
-        </div>
+  const hasAutoOpenedRef = React.useRef(false);
 
-        <MandatoryFeedbackModal
-          sessionId={sessionId}
-          activityName={session.activityName}
-          onFeedbackSuccess={handleFeedbackSuccess}
-        />
-      </div>
-    );
-  }
+  // Reset auto-open ref when viewing a new session
+  React.useEffect(() => {
+    hasAutoOpenedRef.current = false;
+  }, [validStorageId]);
+
+  // Automatically open Feedback Popup Modal ONLY after completed ResultsPage has rendered & painted
+  React.useEffect(() => {
+    const rawScore = session?.finalScore ?? session?.scores?.overall;
+    const hasScore = rawScore !== undefined && rawScore !== null;
+    const evaluationFailed = session?.aiAnalysisAvailable === false || status === 'error';
+    const hasCompletedResult = Boolean(session) && hasScore && !evaluationFailed;
+
+    if (hasCompletedResult && !isFeedbackSubmitted && !hasAutoOpenedRef.current) {
+      hasAutoOpenedRef.current = true;
+      setHasAutoOpened(true);
+
+      const timer = setTimeout(() => {
+        setShowFeedbackModal(true);
+      }, 300);
+
+      return () => clearTimeout(timer);
+    }
+  }, [session, isFeedbackSubmitted, status, validStorageId]);
 
   return (
     <div style={{ maxWidth: '1050px', margin: '0 auto', padding: '30px 20px 60px' }}>
@@ -415,10 +420,28 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
       <div className="glass-card" style={{ padding: '32px', marginBottom: '32px' }}>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <h3 style={{ fontSize: '1.3rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
               🔍 Mistake Analysis &amp; Smart Corrections
             </h3>
+            <a
+              href="https://languagetool.org/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontSize: '0.74rem',
+                color: 'var(--text-muted)',
+                textDecoration: 'none',
+                padding: '2px 8px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-glass)',
+                background: 'var(--bg-input)'
+              }}
+              title="Grammar checking powered by LanguageTool"
+            >
+              Grammar checking by LanguageTool ↗
+            </a>
+
             {status === 'no_speech' && (
               <span style={{
                 padding: '3px 10px',
@@ -837,6 +860,19 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
           <RefreshCw size={18} /> Practice Another Activity
         </button>
       </div>
+
+      {/* ── Feedback Popup Modal (Appears after scores & AI analysis are rendered) ── */}
+      {showFeedbackModal && !isFeedbackSubmitted && (
+        <MandatoryFeedbackModal
+          sessionId={realSessionId}
+          activityName={session.activityName}
+          onFeedbackSuccess={(feedbackData) => {
+            handleFeedbackSuccess(feedbackData);
+            setShowFeedbackModal(false);
+          }}
+          onClose={() => setShowFeedbackModal(false)}
+        />
+      )}
     </div>
   );
 };
