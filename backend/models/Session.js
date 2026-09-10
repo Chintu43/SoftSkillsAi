@@ -45,6 +45,7 @@ const sessionSchema = new mongoose.Schema({
   mentorAdvice: [{ type: String }],
   errorSummary: { type: mongoose.Schema.Types.Mixed, default: {} },
   categoryBreakdown: { type: mongoose.Schema.Types.Mixed, default: {} },
+  userFeedback: { type: mongoose.Schema.Types.Mixed, default: null },
   aiFeedback: { type: String },
   createdAt: { type: Date, default: Date.now }
 }, { strict: false });

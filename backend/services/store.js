@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import mongoose from 'mongoose';
 import { getMongoStatus } from '../config/db.js';
 import User from '../models/User.js';
 import Session from '../models/Session.js';
@@ -203,15 +204,35 @@ export const Store = {
     if (!sessionId) return null;
     if (getMongoStatus()) {
       let session = null;
-      if (sessionId === 'latest' && userId) {
-        session = await Session.findOne({ userId: userId.toString() }).sort({ createdAt: -1 });
-      } else if (userId) {
-        session = await Session.findOne({ _id: sessionId, userId: userId.toString() });
-      } else {
-        session = await Session.findById(sessionId);
+      try {
+        if (sessionId === 'latest' && userId) {
+          session = await Session.findOne({ userId: userId.toString() }).sort({ createdAt: -1 });
+        } else if (userId) {
+          if (mongoose.Types.ObjectId.isValid(sessionId)) {
+            session = await Session.findOne({ _id: sessionId, userId: userId.toString() });
+          }
+          if (!session) {
+            session = await Session.findOne({ userId: userId.toString() }).sort({ createdAt: -1 });
+          }
+        } else {
+          if (mongoose.Types.ObjectId.isValid(sessionId)) {
+            session = await Session.findById(sessionId);
+          }
+        }
+      } catch (e) {
+        console.error('[FEEDBACK] Error finding session for feedback:', e);
       }
+
+      if (!session && userId) {
+        session = await Session.findOne({ userId: userId.toString() }).sort({ createdAt: -1 });
+      }
+
       if (!session) return null;
+
       session.userFeedback = feedbackData;
+      if (typeof session.markModified === 'function') {
+        session.markModified('userFeedback');
+      }
       await session.save();
       return session;
     } else {
@@ -223,9 +244,14 @@ export const Store = {
           .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
       } else {
         session = db.sessions.find(s =>
-          s._id.toString() === sessionId.toString() &&
+          s._id && s._id.toString() === sessionId.toString() &&
           (!userId || (s.userId && s.userId.toString() === userId.toString()))
         );
+        if (!session && userId) {
+          session = db.sessions
+            .filter(s => s.userId && s.userId.toString() === userId.toString())
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
+        }
       }
       if (!session) return null;
       session.userFeedback = feedbackData;
@@ -237,12 +263,26 @@ export const Store = {
   async deleteFeedback(sessionId) {
     if (!sessionId) return false;
     if (getMongoStatus()) {
-      const session = await Session.findByIdAndUpdate(
-        sessionId,
-        { $unset: { userFeedback: 1 } },
-        { new: true }
-      );
-      return !!session;
+      try {
+        let session = null;
+        if (mongoose.Types.ObjectId.isValid(sessionId)) {
+          session = await Session.findByIdAndUpdate(
+            sessionId,
+            { $unset: { userFeedback: 1 } },
+            { new: true }
+          );
+        } else {
+          session = await Session.findOneAndUpdate(
+            { _id: sessionId },
+            { $unset: { userFeedback: 1 } },
+            { new: true }
+          );
+        }
+        return !!session;
+      } catch (e) {
+        console.error('[FEEDBACK] Error deleting feedback:', e);
+        return false;
+      }
     } else {
       const db = loadFallbackDB();
       const session = db.sessions.find(s => s._id && s._id.toString() === sessionId.toString());

@@ -151,6 +151,12 @@ export const submitSessionFeedback = async (req, res) => {
       return res.status(400).json({ message: 'Please select a rating before submitting.' });
     }
 
+    const hasComment = Boolean(typeof description === 'string' && description.trim().length > 0);
+    console.log('[FEEDBACK] Submission received');
+    console.log(`[FEEDBACK] User ID: ${authUserId}`);
+    console.log(`[FEEDBACK] Rating: ${numericRating}`);
+    console.log(`[FEEDBACK] Comment received: ${hasComment ? 'YES' : 'NO'}`);
+
     const feedbackData = {
       rating: numericRating,
       description: typeof description === 'string' ? description.trim() : '',
