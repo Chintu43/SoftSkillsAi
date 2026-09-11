@@ -246,6 +246,25 @@ export const api = {
     }
     if (!res.ok) throw new Error(data.message || 'Failed to clear quota alert');
     return data;
+  },
+
+  async getUserResultsFeedback() {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/admin/user-results-feedback`, {
+        headers: getHeaders()
+      });
+    } catch {
+      throw new Error('Unable to connect to server.');
+    }
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error('Failed to load user results and feedback.');
+    }
+    if (!res.ok) throw new Error(data.message || 'Failed to fetch user results and feedback');
+    return data;
   }
 };
 

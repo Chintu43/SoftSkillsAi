@@ -371,14 +371,21 @@ export const ResultsPage = ({ session, onDashboard, onNewSession }) => {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: '14px' }}>
-            {buildLegacyMetrics(session.scores || {}, isEmptySpeech).map((m, idx) => (
+            {buildLegacyMetrics(session.scores, isEmptySpeech).map((m, idx) => (
               <div key={idx} style={{ background: 'var(--bg-input)', padding: '14px 18px', borderRadius: '12px', border: '1px solid var(--border-glass)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{m.label}</span>
-                  <span style={{ fontWeight: 800, color: m.score > 0 ? m.color : 'var(--text-dim)' }}>{m.score}</span>
+                  <span style={{ fontWeight: 800, color: m.score !== null ? (m.score > 0 ? m.color : 'var(--text-dim)') : 'var(--text-dim)' }}>
+                    {m.score !== null ? m.score : 'N/A'}
+                  </span>
                 </div>
                 <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{ width: `${m.score}%`, height: '100%', background: m.color, borderRadius: '3px' }} />
+                  <div style={{
+                    width: m.score !== null ? `${Math.min(100, Math.max(0, m.score))}%` : '0%',
+                    height: '100%',
+                    background: m.score !== null ? m.color : 'transparent',
+                    borderRadius: '3px'
+                  }} />
                 </div>
               </div>
             ))}
@@ -923,8 +930,13 @@ const LEGACY_METRICS = [
 ];
 
 function buildLegacyMetrics(scores, isEmpty) {
-  return LEGACY_METRICS.map((m) => ({
-    ...m,
-    score: isEmpty ? 0 : (scores[m.key] || 0)
-  }));
+  return LEGACY_METRICS.map((m) => {
+    if (isEmpty) return { ...m, score: 0 };
+    if (!scores) return { ...m, score: null };
+    const val = scores[m.key] ?? (m.key === 'communication' ? scores.clarity : (m.key === 'topicRelevance' ? scores.relevance : undefined));
+    return {
+      ...m,
+      score: typeof val === 'number' ? val : null
+    };
+  });
 }

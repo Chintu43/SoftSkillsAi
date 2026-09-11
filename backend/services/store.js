@@ -485,5 +485,120 @@ export const Store = {
         geminiQuotaExceededAt: quotaInfo.quotaExceededAt
       };
     }
+  },
+
+  // --- USER RESULTS + FEEDBACK (Admin Feature) ---
+  async getUserResultsWithFeedback() {
+    if (getMongoStatus()) {
+      const sessionsWithFeedback = await Session.find({
+        'userFeedback.rating': { $exists: true, $gte: 1, $lte: 5 }
+      }).sort({ 'userFeedback.createdAt': -1, createdAt: -1 });
+
+      return sessionsWithFeedback.map(s => {
+        const raw = s.toObject ? s.toObject() : s;
+        const rating = raw.userFeedback && typeof raw.userFeedback.rating === 'number'
+          ? Math.min(5, Math.max(1, Math.round(raw.userFeedback.rating)))
+          : null;
+
+        return {
+          ...raw,
+          _id: raw._id,
+          id: raw._id,
+          sessionId: raw._id,
+          userId: raw.userId,
+          userName: raw.userName || 'Anonymous',
+          userEmail: raw.userEmail || null,
+          activityType: raw.activityType || null,
+          activityName: raw.activityName || null,
+          topic: raw.topic || null,
+          durationSeconds: raw.durationSeconds !== undefined ? raw.durationSeconds : null,
+          finalScore: raw.finalScore !== undefined ? raw.finalScore : null,
+          performanceLevel: raw.performanceLevel || null,
+          scores: raw.scores || null,
+          criteria: raw.criteria || [],
+          strengths: raw.strengths || [],
+          areasToImprove: raw.areasToImprove || [],
+          positiveObservations: raw.positiveObservations || [],
+          mistakeAnalysis: raw.mistakeAnalysis || null,
+          mistakes: raw.mistakes || [],
+          wordMistakes: raw.wordMistakes || raw.wordAnalysis || [],
+          sentenceAnalysis: raw.sentenceAnalysis || [],
+          correctedSpeech: raw.correctedSpeech || '',
+          summary: raw.summary || '',
+          hasSpeech: raw.hasSpeech !== undefined ? raw.hasSpeech : true,
+          speechDetected: raw.speechDetected !== undefined ? raw.speechDetected : true,
+          pronunciationAnalysis: raw.pronunciationAnalysis || '',
+          fluencyDelivery: raw.fluencyDelivery || '',
+          topicRelevance: raw.topicRelevance || '',
+          mentorAdvice: raw.mentorAdvice || [],
+          aiFeedback: raw.aiFeedback || '',
+          aiAnalysisAvailable: raw.aiAnalysisAvailable,
+          aiAnalysisCompleted: raw.aiAnalysisCompleted,
+          analysisError: raw.analysisError,
+          transcript: raw.transcript || null,
+          isEmptySpeech: raw.isEmptySpeech || false,
+          sessionCreatedAt: raw.createdAt,
+          feedbackRating: rating,
+          feedbackComment: (raw.userFeedback && raw.userFeedback.description) || null,
+          feedbackCreatedAt: (raw.userFeedback && raw.userFeedback.createdAt) || raw.createdAt
+        };
+      });
+    } else {
+      const db = loadFallbackDB();
+      const sessions = (db.sessions || [])
+        .filter(s => s.userFeedback && typeof s.userFeedback.rating === 'number' && s.userFeedback.rating >= 1 && s.userFeedback.rating <= 5)
+        .sort((a, b) => {
+          const dateA = new Date(a.userFeedback.createdAt || a.createdAt);
+          const dateB = new Date(b.userFeedback.createdAt || b.createdAt);
+          return dateB - dateA;
+        });
+
+      return sessions.map(s => {
+        const rating = Math.min(5, Math.max(1, Math.round(s.userFeedback.rating)));
+
+        return {
+          ...s,
+          _id: s._id,
+          id: s._id,
+          sessionId: s._id,
+          userId: s.userId,
+          userName: s.userName || 'Anonymous',
+          userEmail: s.userEmail || null,
+          activityType: s.activityType || null,
+          activityName: s.activityName || null,
+          topic: s.topic || null,
+          durationSeconds: s.durationSeconds !== undefined ? s.durationSeconds : null,
+          finalScore: s.finalScore !== undefined ? s.finalScore : null,
+          performanceLevel: s.performanceLevel || null,
+          scores: s.scores || null,
+          criteria: s.criteria || [],
+          strengths: s.strengths || [],
+          areasToImprove: s.areasToImprove || [],
+          positiveObservations: s.positiveObservations || [],
+          mistakeAnalysis: s.mistakeAnalysis || null,
+          mistakes: s.mistakes || [],
+          wordMistakes: s.wordMistakes || s.wordAnalysis || [],
+          sentenceAnalysis: s.sentenceAnalysis || [],
+          correctedSpeech: s.correctedSpeech || '',
+          summary: s.summary || '',
+          hasSpeech: s.hasSpeech !== undefined ? s.hasSpeech : true,
+          speechDetected: s.speechDetected !== undefined ? s.speechDetected : true,
+          pronunciationAnalysis: s.pronunciationAnalysis || '',
+          fluencyDelivery: s.fluencyDelivery || '',
+          topicRelevance: s.topicRelevance || '',
+          mentorAdvice: s.mentorAdvice || [],
+          aiFeedback: s.aiFeedback || '',
+          aiAnalysisAvailable: s.aiAnalysisAvailable,
+          aiAnalysisCompleted: s.aiAnalysisCompleted,
+          analysisError: s.analysisError,
+          transcript: s.transcript || null,
+          isEmptySpeech: s.isEmptySpeech || false,
+          sessionCreatedAt: s.createdAt,
+          feedbackRating: rating,
+          feedbackComment: s.userFeedback.description || null,
+          feedbackCreatedAt: s.userFeedback.createdAt || s.createdAt
+        };
+      });
+    }
   }
 };

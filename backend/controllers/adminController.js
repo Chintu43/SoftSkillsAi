@@ -95,3 +95,13 @@ export const clearQuotaAlert = async (req, res) => {
   }
 };
 
+export const getUserResultsFeedback = async (req, res) => {
+  try {
+    const records = await Store.getUserResultsWithFeedback();
+    res.json({ records });
+  } catch (error) {
+    console.error('Get user results+feedback error:', error);
+    res.status(500).json({ message: 'Error retrieving user results and feedback' });
+  }
+};
+
